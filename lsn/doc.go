@@ -33,12 +33,12 @@
 //	s := l.String()            // "1/3"
 //	s := l.Expanded()          // "00000001-00000003"
 //
-// Use with database/sql or encoding/json:
+// Use with database/sql or encoding/json/v2:
 //
 //	var l lsn.LSN
 //	_ = l.Scan(uint64(3))          // from database/sql
-//	b, _ := l.MarshalJSON()        // -> "\"0/3\""
-//	_ = (&l).UnmarshalJSON(b)
+//	b, _ := json.Marshal(l)        // -> "\"0/3\""
+//	_ = json.Unmarshal(b, &l)
 //
 // # Delimiters
 //

@@ -3,7 +3,8 @@ package slot
 import (
 	"fmt"
 	"errors"
-	"encoding/json"
+	"encoding/json/v2"
+	"encoding/json/jsontext"
 )
 
 type Type uint8
@@ -64,13 +65,13 @@ func (t *Type) Scan(from interface{}) error {
 	return nil
 }
 
-func (t Type) MarshalJSON() ([]byte, error) {
-	return json.Marshal(t.String())
+func (t Type) MarshalJSONTo(enc *jsontext.Encoder) error {
+	return json.MarshalEncode(enc, t.String())
 }
 
-func (t *Type) UnmarshalJSON(b []byte) error {
+func (t *Type) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
 	var s string
-	if err := json.Unmarshal(b, &s); err != nil {
+	if err := json.UnmarshalDecode(dec, &s); err != nil {
 		return err
 	}
 	return t.Scan(s)

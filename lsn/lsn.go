@@ -21,7 +21,8 @@ import (
 	"errors"
 	"strings"
 	"strconv"
-	"encoding/json"
+	"encoding/json/v2"
+	"encoding/json/jsontext"
 )
 
 // LSN represents a PostgreSQL log sequence number as a 64-bit integer.
@@ -107,14 +108,14 @@ func (l *LSN) Scan(from interface{}) error {
 }
 
 // MarshalJSON encodes the LSN as a JSON string in the [LSN.String] format.
-func (t LSN) MarshalJSON() ([]byte, error) {
-	return json.Marshal(t.String())
+func (t LSN) MarshalJSONTo(enc *jsontext.Encoder) error {
+	return json.MarshalEncode(enc, t.String())
 }
 
 // UnmarshalJSON decodes a JSON string into an [LSN] using [LSN.Scan].
-func (t *LSN) UnmarshalJSON(b []byte) error {
+func (t *LSN) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
 	var s string
-	if err := json.Unmarshal(b, &s); err != nil {
+	if err := json.UnmarshalDecode(dec, &s); err != nil {
 		return err
 	}
 	return t.Scan(s)

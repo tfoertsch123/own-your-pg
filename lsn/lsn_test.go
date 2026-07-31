@@ -3,6 +3,8 @@ package lsn
 import (
 	"testing"
 	"errors"
+
+	"encoding/json/v2"
 )
 
 func TestParseLSN_ok(t *testing.T) {
@@ -145,7 +147,7 @@ func TestMarshalJSON(t *testing.T) {
 	}
 
 	for _, x := range tests {
-		s, err := x.l.MarshalJSON()
+		s, err := json.Marshal(x.l)
 		if string(x.s) != string(s) || err != nil {
 			t.Errorf("lsn: %x, s: %s, err: %v", x.l, s, err)
 		}
@@ -164,9 +166,9 @@ func TestUnmarshalJSON_ok(t *testing.T) {
 
 	for _, x := range tests {
 		var lsn LSN
-		err := (&lsn).UnmarshalJSON([]byte(x.s))
+		err := json.Unmarshal([]byte(x.s), &lsn)
 		if err != nil || lsn != x.l {
-			t.Errorf("string: %v, lsn: %x, err: %v", x.s, x.l, err)
+			t.Errorf("string: %v, lsn: %#x, err: %v", x.s, x.l, err)
 		}
 	}
 }
@@ -181,7 +183,7 @@ func TestUnmarshalJSON_fail(t *testing.T) {
 
 	for _, x := range tests {
 		lsn := LSN(123)
-		err := (&lsn).UnmarshalJSON([]byte(x.s))
+		err := json.Unmarshal([]byte(x.s), &lsn)
 		if err == nil || lsn != LSN(123) {
 			t.Errorf("string: %v, goterr: %v", x.s, err)
 		}

@@ -3,6 +3,8 @@ package slot
 import (
 	"testing"
 	"errors"
+
+	"encoding/json/v2"
 )
 
 func TestTypeString(t *testing.T) {
@@ -81,13 +83,13 @@ func TestTypeMarshal(t *testing.T) {
 	}
 
 	for _, x := range tests {
-		if bts, err := x.t.MarshalJSON(); string(bts) != x.s || err != nil {
+		if bts, err := json.Marshal(x.t); string(bts) != x.s || err != nil {
 			t.Errorf("Marshal(%v): exp %s, got %s", x.t, x.s, string(bts))
 		}
 	}
 }
 
-func TestTypeUnmarshalJSON(t *testing.T) {
+func TestTypeUnmarshal(t *testing.T) {
 	tests := []struct{
 		s string
 		t Type
@@ -103,7 +105,7 @@ func TestTypeUnmarshalJSON(t *testing.T) {
 
 	for _, x := range tests {
 		var v Type
-		err := (&v).UnmarshalJSON([]byte(x.s))
+		err := json.Unmarshal([]byte(x.s), &v)
 		if x.t == Type(255) {
 			if v != Any || !errors.Is(err, x.e) {
 				t.Errorf("Unmarshal(%v): exp 0/%v, got %v/%v", x.s, x.e, v, err)
@@ -116,7 +118,7 @@ func TestTypeUnmarshalJSON(t *testing.T) {
 		}
 	}
 
-	if err := (*Type)(nil).UnmarshalJSON([]byte(`"Change`)); err == nil {
+	if err := json.Unmarshal([]byte(`"Change`), (*Type)(nil)); err == nil {
 		t.Error("Unmarshal(`\"Change`): exp error, got nil")
 	}
 }
