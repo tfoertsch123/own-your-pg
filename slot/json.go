@@ -2,6 +2,8 @@ package slot
 
 import (
 	"fmt"
+	"maps"
+	"slices"
 	"strings"
 	"encoding/json"
 
@@ -26,28 +28,21 @@ type jsonConfig map[string][]string
 func (c jsonConfig) MarshalJSON() ([]byte, error) {
 	buf := []byte("{")
 	first := true
-	for k, v := range c {
-		if !first {
+	for _, k := range slices.Sorted(maps.Keys(c)) {
+		v := c[k]
+		if first {
+			first = false
+		} else {
 			buf = append(buf, ',')
 		}
-		first = false
-		kb, err := json.Marshal(k)
-		if err != nil {
-			return nil, err
-		}
+		kb, _ := json.Marshal(k)        // marshaling a string cannot fail
 		buf = append(buf, kb...)
 		buf = append(buf, ':')
 		if len(v) == 1 {
-			vb, err := json.Marshal(v[0])
-			if err != nil {
-				return nil, err
-			}
+			vb, _ := json.Marshal(v[0]) // marshaling a string cannot fail
 			buf = append(buf, vb...)
 		} else {
-			vb, err := json.Marshal(v)
-			if err != nil {
-				return nil, err
-			}
+			vb, _ := json.Marshal(v)    // marshaling a string cannot fail
 			buf = append(buf, vb...)
 		}
 	}

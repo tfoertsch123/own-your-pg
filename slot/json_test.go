@@ -219,7 +219,15 @@ func TestSlotJSONConfigRejectsNonString(t *testing.T) {
 	in := `{"Name":"s","NextLSN":"0/0","OwnerPid":1,"Type":"Change","Config":{"k":123},"PidActive":null}`
 	var got Slot
 	if err := json.Unmarshal([]byte(in), &got); err == nil {
-		t.Errorf("expected error for non-string/non-array config value, got nil")
+		t.Errorf("expected error for non-string/non-array config value")
+	}
+}
+
+func TestSlotJSONConfigRejectsNonIncompatibleConfig(t *testing.T) {
+	in := `{"Name":"s","NextLSN":"0/0","OwnerPid":1,"Type":"Change","Config":[],"PidActive":null}`
+	var got Slot
+	if err := json.Unmarshal([]byte(in), &got); err == nil {
+		t.Errorf("expected error for non-string/non-array config type")
 	}
 }
 
