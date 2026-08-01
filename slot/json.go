@@ -1,22 +1,21 @@
 package slot
 
 import (
-	"fmt"
 	"maps"
 	"slices"
-	"strings"
-	"encoding/json"
+	"encoding/json/v2"
+	"encoding/json/jsontext"
 
 	"github.com/tfoertsch123/own-your-pg/lsn"
 )
 
 type slotJSON struct {
 	Name      string              `json:"Name"`
-	NextLSN   *lsn.LSN            `json:"NextLSN",omitnull`
+	NextLSN   *lsn.LSN            `json:"NextLSN,omitempty"`
 	OwnerPid  int64               `json:"OwnerPid"`
 	PidActive *bool               `json:"PidActive"`
 	Type      Type                `json:"Type"`
-	Config    jsonConfig          `json:"Config"`
+	Config    jsonConfig          `json:"Config,omitempty"`
 }
 
 // jsonConfig is a map[string][]string that accepts either a JSON string or a
@@ -25,56 +24,68 @@ type slotJSON struct {
 // slice as a bare JSON string and everything else as a JSON array.
 type jsonConfig map[string][]string
 
-func (c jsonConfig) MarshalJSON() ([]byte, error) {
-	buf := []byte("{")
-	first := true
-	for _, k := range slices.Sorted(maps.Keys(c)) {
-		v := c[k]
-		if first {
-			first = false
-		} else {
-			buf = append(buf, ',')
-		}
-		kb, _ := json.Marshal(k)        // marshaling a string cannot fail
-		buf = append(buf, kb...)
-		buf = append(buf, ':')
-		if len(v) == 1 {
-			vb, _ := json.Marshal(v[0]) // marshaling a string cannot fail
-			buf = append(buf, vb...)
-		} else {
-			vb, _ := json.Marshal(v)    // marshaling a string cannot fail
-			buf = append(buf, vb...)
-		}
-	}
-	buf = append(buf, '}')
-	return buf, nil
-}
-
-func (c *jsonConfig) UnmarshalJSON(b []byte) error {
-	var raw map[string]json.RawMessage
-	if err := json.Unmarshal(b, &raw); err != nil {
+func (c jsonConfig) MarshalJSONTo(enc *jsontext.Encoder) error {
+	if err := enc.WriteToken(jsontext.BeginObject); err != nil {
 		return err
 	}
-	if *c == nil {
-		*c = make(map[string][]string, len(raw))
+	for _, k := range slices.Sorted(maps.Keys(c)) {
+		v := c[k]
+		if err := enc.WriteToken(jsontext.String(k)); err != nil {
+			return err
+		}
+
+		if len(v) == 1 {
+			if err := json.MarshalEncode(enc, &v[0]); err != nil {
+				return err
+			}
+		} else {
+			if err := json.MarshalEncode(enc, &v); err != nil {
+				return err
+			}
+		}
 	}
-	for k, v := range raw {
-		var arr []string
-		if err := json.Unmarshal(v, &arr); err == nil {
-			(*c)[k] = arr
-			continue
-		}
-		var s string
-		if err := json.Unmarshal(v, &s); err == nil {
-			(*c)[k] = []string{s}
-			continue
-		}
-		return fmt.Errorf("Config[%q]: expected string or []string", k)
+	if err := enc.WriteToken(jsontext.EndObject); err != nil {
+		return err
 	}
 	return nil
 }
 
-func (sl Slot) MarshalJSON() ([]byte, error) {
+func (recv *jsonConfig) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
+	if k := dec.PeekKind(); k != '{' {
+		// The [json] package automatically populates relevant fields
+		// in a [json.SemanticError] to provide additional context.
+		return &json.SemanticError{JSONKind: k}
+	}
+	dec.ReadToken()				// we know this is a { -- consume it
+
+	c := make(map[string][]string, 10)
+	for dec.PeekKind() != '}' {
+		var key string
+		var vals []string
+		if err := json.UnmarshalDecode(dec, &key); err != nil {
+			return err
+		}
+
+		if k := dec.PeekKind(); k == '[' {
+			if err := json.UnmarshalDecode(dec, &vals); err != nil {
+				return err
+			}
+		} else {
+			var val string
+			if err := json.UnmarshalDecode(dec, &val); err != nil {
+				return err
+			}
+			vals = append(vals, val)
+		}
+		c[key] = vals
+	}
+	dec.ReadToken()				// consume the }
+
+	*recv = c
+	return nil
+}
+
+func (sl Slot) MarshalJSONTo(enc *jsontext.Encoder) error {
 	var pidActive *bool
 	if sl.fh != nil && !sl.skipCheckPidActive {
 		active, err := sl.OwnerActive()
@@ -87,7 +98,7 @@ func (sl Slot) MarshalJSON() ([]byte, error) {
 		lp = &sl.NextLSN
 	}
 
-	return json.Marshal(slotJSON{
+	return json.MarshalEncode(enc, &slotJSON{
 		Name:      sl.name,
 		NextLSN:   lp,
 		OwnerPid:  sl.OwnerPid,
@@ -97,14 +108,18 @@ func (sl Slot) MarshalJSON() ([]byte, error) {
 	})
 }
 
-func (sl *Slot) UnmarshalJSON(b []byte) error {
+func (sl *Slot) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
 	var s slotJSON
-	if err := json.Unmarshal(b, &s); err != nil {
+	if err := json.UnmarshalDecode(dec, &s); err != nil {
 		return err
 	}
 
 	sl.name = s.Name
-	sl.NextLSN = *s.NextLSN
+	if s.NextLSN == nil {
+		sl.NextLSN = lsn.LSN(0)
+	} else {
+		sl.NextLSN = *s.NextLSN
+	}
 	sl.OwnerPid = s.OwnerPid
 	sl.SlotType = s.Type
 	sl.Config = s.Config
@@ -115,6 +130,7 @@ type asJSONopts struct {
 	dense    bool
 	checkPid bool
 	escHTML  bool
+	escJS    bool
 }
 type AsJSONOpt func(*asJSONopts)
 
@@ -130,25 +146,37 @@ func WithEscapeHTML () AsJSONOpt {
 	return func(x *asJSONopts) {x.escHTML = true}
 }
 
+func WithEscapeJS () AsJSONOpt {
+	return func(x *asJSONopts) {x.escJS = true}
+}
+
 func (sl *Slot) AsJSON(opts ...AsJSONOpt) (string, error) {
 	descr := &asJSONopts{}
 	for _, o := range opts {o(descr)}
 
+	// the actual check runs in the Marshal function
 	sl.skipCheckPidActive = !descr.checkPid
 
-	var b strings.Builder
-	enc := json.NewEncoder(&b)
-	enc.SetEscapeHTML(descr.escHTML)
-
+	jsopts := []jsontext.Options{
+		jsontext.AllowInvalidUTF8(false),
+		jsontext.EscapeForHTML(descr.escHTML),
+		jsontext.EscapeForJS(descr.escJS),
+	}
 	if !descr.dense {
-		enc.SetIndent("", "  ")
+		jsopts = append(jsopts,
+			jsontext.Multiline(true),
+			jsontext.SpaceAfterColon(true),
+			// jsontext.SpaceAfterComma(true),
+			jsontext.WithIndent("  "),
+		)
 	}
 
-	if err := enc.Encode(sl); err != nil {
+	b, err := json.Marshal(&sl, jsopts...)
+	if err != nil {
 		return "", err
 	}
 
-	return b.String(), nil
+	return string(b), nil
 }
 
 // Local Variables:
