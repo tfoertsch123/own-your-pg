@@ -203,7 +203,7 @@ func TestSlotJSONConfigRejectsIncompatibleConfig(t *testing.T) {
 	}
 }
 
-func TestSlotJSONConfigRejectsInvalidStrings(t *testing.T) {
+func TestSlotJSONConfigInvalidUnmarshal(t *testing.T) {
 	in := `{"Config":{"key":"test","k2":["tets"]},"Name":"s","NextLSN":"0/0",`+
 		`"OwnerPid":1,"Type":"Change","PidActive":null}`
 	bts := []byte(in)
@@ -259,6 +259,47 @@ func TestSlotJSONConfigRejectsInvalidStrings(t *testing.T) {
 			t.Logf("%#v", got)
 		} else {
 			t.Logf("expected error = %v", err)
+		}
+	})
+}
+
+func TestSlotJsonConfigInvalidMarshal(t *testing.T) {
+	t.Run("Invalid Key", func(t *testing.T) {
+		cf := &jsonConfig{
+			"k\xffy1": {"string1&1", "string1&2"},
+			"key2": {"string2&1"},
+		}
+		js, err := json.Marshal(cf, jsontext.AllowInvalidUTF8(false))
+		if err == nil {
+			t.Errorf("unexpected success, got <%s>", js)
+		} else if !errors.Is(err, errInvalidUTF8) {
+			t.Errorf("expecting invalid UTF8, got %v", err)
+		}
+	})
+
+	t.Run("Invalid List", func(t *testing.T) {
+		cf := &jsonConfig{
+			"key1": {"string1&1", "str\xffng1&2"},
+			"key2": {"string2&1"},
+		}
+		js, err := json.Marshal(cf, jsontext.AllowInvalidUTF8(false))
+		if err == nil {
+			t.Errorf("unexpected success, got <%s>", js)
+		} else if !errors.Is(err, errInvalidUTF8) {
+			t.Errorf("expecting invalid UTF8, got %v", err)
+		}
+	})
+
+	t.Run("Invalid Scalar", func(t *testing.T) {
+		cf := &jsonConfig{
+			"key1": {"string1&1", "string1&2"},
+			"key2": {"str\xffng2&1"},
+		}
+		js, err := json.Marshal(cf, jsontext.AllowInvalidUTF8(false))
+		if err == nil {
+			t.Errorf("unexpected success, got <%s>", js)
+		} else if !errors.Is(err, errInvalidUTF8) {
+			t.Errorf("expecting invalid UTF8, got %v", err)
 		}
 	})
 }
