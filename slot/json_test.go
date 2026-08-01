@@ -1,6 +1,7 @@
 package slot
 
 import (
+	"os"
 	"encoding/json/v2"
 	"encoding/json/jsontext"
 	"errors"
@@ -424,6 +425,73 @@ func TestSlotJsonAsJSON(t *testing.T) {
 			t.Errorf("unexpected success, got <%s>", js)
 		} else if !errors.Is(err, errInvalidUTF8) {
 			t.Errorf("expecting invalid UTF8, got %v", err)
+		}
+	})
+}
+
+func TestSlotJsonAsJSONReal(t *testing.T) {
+	dir := t.TempDir()
+	mgr, err := NewMgr(dir)
+	if err != nil {
+		t.Fatalf("Could not create manager %v", err)
+	}
+	defer mgr.Close()
+
+	t.Run("AsOwner", func(t *testing.T) {
+		sl, err := mgr.Slot("test", WithAsOwner(), WithType(Archiver))
+		if err != nil {
+			t.Fatalf("Could not create slot %v", err)
+		}
+		defer sl.Close()
+
+		exp_sl := &Slot{
+			name: "test",
+			header: header{
+				SlotType: Archiver,
+			},
+		}
+		exp_sl.OwnerPid = int64(os.Getpid())
+		exp_js, err := exp_sl.AsJSON()
+		if err != nil {
+			t.Fatalf("AsJSON: %v", err)
+		}
+		exp_js = strings.Replace(exp_js, "null", "true", 1)
+
+		js, err := sl.AsJSON(WithPidCheck())
+		if err != nil {
+			t.Errorf("AsJSON: %v", err)
+		}
+		if js != exp_js {
+			t.Errorf("exp <%v>, got <%v>", exp_js, js)
+		}
+	})
+
+	t.Run("AsOther", func(t *testing.T) {
+		sl, err := mgr.Slot("test", WithType(Any))
+		if err != nil {
+			t.Fatalf("Could not create slot %v", err)
+		}
+		defer sl.Close()
+
+		exp_sl := &Slot{
+			name: "test",
+			header: header{
+				SlotType: Archiver,
+			},
+		}
+		exp_sl.OwnerPid = int64(os.Getpid())
+		exp_js, err := exp_sl.AsJSON()
+		if err != nil {
+			t.Fatalf("AsJSON: %v", err)
+		}
+		exp_js = strings.Replace(exp_js, "null", "false", 1)
+
+		js, err := sl.AsJSON(WithPidCheck())
+		if err != nil {
+			t.Errorf("AsJSON: %v", err)
+		}
+		if js != exp_js {
+			t.Errorf("exp <%v>, got <%v>", exp_js, js)
 		}
 	})
 }

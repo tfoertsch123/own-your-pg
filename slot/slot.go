@@ -24,7 +24,7 @@ import (
 
 	"golang.org/x/sys/unix"
 
-	// "github.com/tfoertsch123/log"
+	"github.com/tfoertsch123/log"
 	"github.com/tfoertsch123/flock"
 	"github.com/tfoertsch123/own-your-pg/lsn"
 )
@@ -160,6 +160,11 @@ func (m *Mgr) Slot(name string, opts ...SlotOpt) (*Slot, error) {
 	return sl, nil
 }
 
+func (sl *Slot) Close() error {
+	sl.lck.Close()
+	return sl.fh.Close()
+}
+
 func (sl *Slot) SetConfig(k string, v ...string) {
 	sl.Config[k] = v
 }
@@ -200,6 +205,7 @@ func (sl *Slot) SetLSN(lsn lsn.LSN, sync bool) error {
 }
 
 func (sl *Slot) OwnerActive() (bool, error) {
+	log.Errorf("OwnerActive: <%#v>, fh:<%v>", sl.lck, sl.fh)
 	if sl.owner {
 		return true, nil
 	}
@@ -208,6 +214,7 @@ func (sl *Slot) OwnerActive() (bool, error) {
 		sl.unlockOwner()
 		return true, nil
 	}
+	log.Errorf("OwnerActive: %v", err)
 	return false, err
 }
 
