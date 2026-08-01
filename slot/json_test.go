@@ -3,12 +3,27 @@ package slot
 import (
 	"encoding/json/v2"
 	"encoding/json/jsontext"
+	"errors"
 	"strings"
 	"testing"
- 	// us "unsafe"
 
 	"github.com/tfoertsch123/own-your-pg/lsn"
 )
+
+// errInvalidUTF8 is the sentinel error that encoding/json/v2 returns when
+// marshaling a string containing invalid UTF-8. The error is defined in the
+// internal package encoding/json/internal/jsonwire, which cannot be imported
+// directly. Instead, we probe the public API once at init time and capture a
+// reference to the exact sentinel so that errors.Is can be used in tests.
+var errInvalidUTF8 error
+
+func init() {
+	_, err := json.Marshal("\xff")
+	var serr *jsontext.SyntacticError
+	if errors.As(err, &serr) {
+		errInvalidUTF8 = serr.Err
+	}
+}
 
 func TestSlotJSONRoundTrip(t *testing.T) {
 	tests := []struct {
@@ -366,7 +381,7 @@ func TestSlotJsonAsJSON(t *testing.T) {
 		js, err := sl.AsJSON()
 		if err == nil {
 			t.Errorf("unexpected success, got <%s>", js)
-		} else if !strings.Contains(err.Error(), `invalid UTF-8`) {
+		} else if !errors.Is(err, errInvalidUTF8) {
 			t.Errorf("expecting invalid UTF8, got %v", err)
 		}
 	})
