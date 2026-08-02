@@ -2,10 +2,12 @@ package slot
 
 import (
 	"errors"
+	"iter"
 
 	"golang.org/x/sys/unix"
 
 	"github.com/tfoertsch123/flock"
+	"github.com/tfoertsch123/own-your-pg/ls"
 )
 
 type Mgr struct {
@@ -56,6 +58,9 @@ func (m *Mgr) unlock() error {
 	return m.lck.Unlock()
 }
 
+func (m *Mgr) Slots() iter.Seq2[*ls.DirItem, error] {
+	return ls.Ls(m.dir, nil)
+}
 
 // Local Variables:
 // tab-width: 4

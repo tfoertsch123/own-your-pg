@@ -3,7 +3,9 @@ module github.com/tfoertsch123/own-your-pg
 go 1.26.4
 
 require (
+	github.com/alecthomas/kong v1.16.0 // indirect
 	github.com/alecthomas/units v0.0.0-20240927000941-0f3dac36c52b // indirect
+	github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51 // indirect
 	github.com/philhofer/fwd v1.2.0 // indirect
 	github.com/tfoertsch123/flock v1.0.0 // indirect
 	github.com/tfoertsch123/log v0.3.0 // indirect

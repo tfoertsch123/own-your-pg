@@ -107,6 +107,11 @@ func (l *LSN) Scan(from interface{}) error {
 	return nil
 }
 
+// UnmarshalText implements encoding.TextUnmarshaler
+func (t *LSN) UnmarshalText(bts []byte) error {
+	return t.Scan(bts)
+}
+
 // MarshalJSON encodes the LSN as a JSON string in the [LSN.String] format.
 func (t LSN) MarshalJSONTo(enc *jsontext.Encoder) error {
 	return json.MarshalEncode(enc, t.String())

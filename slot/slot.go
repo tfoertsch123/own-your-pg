@@ -24,7 +24,6 @@ import (
 
 	"golang.org/x/sys/unix"
 
-	// "github.com/tfoertsch123/log"
 	"github.com/tfoertsch123/flock"
 	"github.com/tfoertsch123/own-your-pg/lsn"
 )

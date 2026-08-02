@@ -26,6 +26,11 @@ func TestParseLSN_ok(t *testing.T) {
 		if err != nil || lsn != x.l {
 			t.Errorf("string: %v, lsn: %x, err: %v", x.s, x.l, err)
 		}
+		lsn = LSN(0)
+		err = (&lsn).UnmarshalText([]byte(x.s))
+		if err != nil || lsn != x.l {
+			t.Errorf("string: %v, lsn: %x, err: %v", x.s, x.l, err)
+		}
 	}
 }
 

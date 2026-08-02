@@ -62,6 +62,19 @@ func TestTypeScan(t *testing.T) {
 				t.Errorf("Scan(%v): exp %v/nil, got %v/%v", x.i, x.t, v, err)
 			}
 		}
+		if bts, ok := x.i.(string); ok {
+			var v Type
+			err := (&v).UnmarshalText([]byte(bts))
+			if x.t == Type(255) {
+				if v != Any || !errors.Is(err, x.e) {
+					t.Errorf("Scan(%v): exp 0/%v, got %v/%v", x.i, x.e, v, err)
+				}
+			} else {
+				if v != x.t || err != nil {
+					t.Errorf("Scan(%v): exp %v/nil, got %v/%v", x.i, x.t, v,err)
+				}
+			}
+		}
 	}
 
 	if err := (*Type)(nil).Scan("Change"); err != nil {

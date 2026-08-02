@@ -65,6 +65,11 @@ func (t *Type) Scan(from interface{}) error {
 	return nil
 }
 
+// UnmarshalText implements encoding.TextUnmarshaler
+func (t *Type) UnmarshalText(bts []byte) error {
+	return t.Scan(string(bts))
+}
+
 func (t Type) MarshalJSONTo(enc *jsontext.Encoder) error {
 	return json.MarshalEncode(enc, t.String())
 }
