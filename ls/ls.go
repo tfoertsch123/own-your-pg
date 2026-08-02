@@ -92,7 +92,7 @@ func Ls(dir string, re *regexp.Regexp, types ...uint8) iter.Seq2[*DirItem, error
 
 				var name string
 				bts := us.Slice(
-					(*byte)(us.Pointer(us.SliceData(entry.Name[:]))),
+					(*byte)(us.Pointer(&entry.Name[0])),
 					len(entry.Name[:]),
 				)
 				idx := bytes.Index(bts, []byte{0})
