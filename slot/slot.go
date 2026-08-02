@@ -24,7 +24,7 @@ import (
 
 	"golang.org/x/sys/unix"
 
-	"github.com/tfoertsch123/log"
+	// "github.com/tfoertsch123/log"
 	"github.com/tfoertsch123/flock"
 	"github.com/tfoertsch123/own-your-pg/lsn"
 )
@@ -204,18 +204,19 @@ func (sl *Slot) SetLSN(lsn lsn.LSN, sync bool) error {
 	return nil
 }
 
+// OwnerActive determines if the PID set as OwnerPid is running. It does so
+// by trying to acquire the lock (flock(2)) on the slot file. If that
+// succeeds the owner process is not running. Otherwise it is.
 func (sl *Slot) OwnerActive() (bool, error) {
-	log.Errorf("OwnerActive: <%#v>, fh:<%v>", sl.lck, sl.fh)
 	if sl.owner {
 		return true, nil
 	}
-	success, err := sl.lockPid()
+	success, err := sl.tryLockPid()
 	if success {
-		sl.unlockOwner()
-		return true, nil
+		sl.unlockPid()
+		return false, nil
 	}
-	log.Errorf("OwnerActive: %v", err)
-	return false, err
+	return true, err
 }
 
 func (sl *Slot) String() string {
