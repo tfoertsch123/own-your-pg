@@ -20,7 +20,6 @@ import (
 	"os"
 	"fmt"
 	"errors"
-	"path/filepath"
 
 	"golang.org/x/sys/unix"
 
@@ -50,6 +49,7 @@ type slotopts struct {
 	create   bool
 	writable bool
 	asowner  bool
+	nopidlck bool
 	typ      Type
 }
 
@@ -80,6 +80,17 @@ func WithAsOwner() SlotOpt {
 	}
 }
 
+// O_RDWR + O_CREAT + ownerlock - pidlock
+// used by slottool
+func WithNoPidLock() SlotOpt {
+	return func(o *slotopts) {
+		o.asowner = true
+		o.writable = true
+		o.create = true
+		o.nopidlck = true
+	}
+}
+
 func WithType(v Type) SlotOpt {
 	return func(o *slotopts) {
 		o.typ = v
@@ -101,11 +112,14 @@ func (m *Mgr) Slot(name string, opts ...SlotOpt) (*Slot, error) {
 		name: name,
 		mgr: m,
 		writable: slo.writable,
-		owner: slo.asowner,
 	}
 
+	if err := m.Check(false); err != nil { // make sure m.lck is valid
+		return nil, err
+	}
 	flo := []flock.Option{
-		flock.WithPath(filepath.Join(m.Dir(), name + fext)),
+		flock.WithPath(name + fext),
+		flock.WithPathAt(m.lck.Fd()),
 	}
 
 	if slo.writable {
@@ -125,7 +139,7 @@ func (m *Mgr) Slot(name string, opts ...SlotOpt) (*Slot, error) {
 	}
 	sl.fh = sl.lck.File()
 
-	if sl.owner {
+	if slo.asowner {
 		success, err := sl.lockOwner()
 		if !success {
 			if err == nil {
@@ -142,7 +156,7 @@ func (m *Mgr) Slot(name string, opts ...SlotOpt) (*Slot, error) {
 	}
 
 	// Set OwnerPid and confirm it by acquiring the PID lock
-	if sl.owner {
+	if slo.asowner && !slo.nopidlck {
 		pid := int64(os.Getpid())
 		sl.OwnerPid = pid
 		sl.saveHeader()
@@ -154,6 +168,7 @@ func (m *Mgr) Slot(name string, opts ...SlotOpt) (*Slot, error) {
 			sl.fh.Close()
 			return nil, fmt.Errorf(`slot %s: UNEXPECTED %w`, sl.name, err)
 		}
+		sl.owner = true
 	}
 
 	return sl, nil
@@ -164,8 +179,12 @@ func (sl *Slot) Close() error {
 	return sl.fh.Close()
 }
 
-func (sl *Slot) SetConfig(k string, v ...string) {
-	sl.Config[k] = v
+func (sl *Slot) SetConfig(k string, v []string) {
+	if v == nil {
+		delete(sl.Config, k)
+	} else {
+		sl.Config[k] = v
+	}
 }
 
 func (sl *Slot) GetConfig(k string) []string {
@@ -190,8 +209,27 @@ func (sl *Slot) SaveConfig(sync bool) error {
 
 // SetLSN sets the NextLSN field. If sync is true, it writes the slot
 // header and fsync()s the file.
+var ErrNoLSNForConfig error = errors.New("Config slot does not support LSN")
 func (sl *Slot) SetLSN(lsn lsn.LSN, sync bool) error {
+	if sl.SlotType == Config {
+		return ErrNoLSNForConfig
+	}
 	sl.NextLSN = lsn
+	if sync {
+		if err := sl.saveHeader(); err != nil {
+			return err
+		}
+		if err := sl.fh.Sync(); err != nil {
+			return fmt.Errorf(`fsync(slot %s): %w`, sl.name, err)
+		}
+	}
+	return nil
+}
+
+// SetType sets the SlotType field. If sync is true, it writes the slot
+// header and fsync()s the file.
+func (sl *Slot) SetType(typ Type, sync bool) error {
+	sl.SlotType = typ
 	if sync {
 		if err := sl.saveHeader(); err != nil {
 			return err

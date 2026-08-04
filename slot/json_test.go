@@ -221,9 +221,9 @@ func TestSlotJSONConfigInvalidUnmarshal(t *testing.T) {
 			jsontext.AllowInvalidUTF8(false),
 		); err == nil {
 			t.Errorf("expected error for non-string/non-array config type")
-			t.Logf("%#v", got)
-		} else {
-			t.Logf("expected error = %v", err)
+		// 	t.Logf("%#v", got)
+		// } else {
+		// 	t.Logf("expected error = %v", err)
 		}
 	})
 
@@ -239,9 +239,9 @@ func TestSlotJSONConfigInvalidUnmarshal(t *testing.T) {
 			jsontext.AllowInvalidUTF8(false),
 		); err == nil {
 			t.Errorf("expected error for non-string/non-array config type")
-			t.Logf("%#v", got)
-		} else {
-			t.Logf("expected error = %v", err)
+		// 	t.Logf("%#v", got)
+		// } else {
+		// 	t.Logf("expected error = %v", err)
 		}
 	})
 
@@ -257,9 +257,9 @@ func TestSlotJSONConfigInvalidUnmarshal(t *testing.T) {
 			jsontext.AllowInvalidUTF8(false),
 		); err == nil {
 			t.Errorf("expected error for non-string/non-array config type")
-			t.Logf("%#v", got)
-		} else {
-			t.Logf("expected error = %v", err)
+		// 	t.Logf("%#v", got)
+		// } else {
+		// 	t.Logf("expected error = %v", err)
 		}
 	})
 }
@@ -431,7 +431,7 @@ func TestSlotJsonAsJSON(t *testing.T) {
 
 func TestSlotJsonAsJSONReal(t *testing.T) {
 	dir := t.TempDir()
-	mgr, err := NewMgr(dir)
+	mgr, err := NewMgr(dir, WithMgrCheck())
 	if err != nil {
 		t.Fatalf("Could not create manager %v", err)
 	}

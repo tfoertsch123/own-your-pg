@@ -75,6 +75,7 @@ func (sl *Slot) unlockPid() error {
 	return sl.lck.Unlock()
 }
 
+// used by slottool
 func (sl *Slot) lockOwner() (bool, error) {
 	if sl.SlotType == Producer {
 		success, err := sl.mgr.lock()
@@ -93,6 +94,7 @@ func (sl *Slot) lockOwner() (bool, error) {
 	return false, err
 }
 
+// used by slottool
 func (sl *Slot) unlockOwner() error {
 	err1 := sl.unlockPid()
 	err2 := sl.lck.UnlockRange(lckOwner, 1)
