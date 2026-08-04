@@ -1,0 +1,8 @@
+.gitignore
+*~
+cover.out
+coverage.html
+*_gen.go
+*_gen_test.go
+/bin
+/tmp
