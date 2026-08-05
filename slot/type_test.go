@@ -103,37 +103,49 @@ func TestTypeMarshal(t *testing.T) {
 }
 
 func TestTypeUnmarshal(t *testing.T) {
-	tests := []struct{
-		s string
-		t Type
-		e error
-	}{
-		{`"Any"`, Type(255), ErrInvalidSlotType}, // No scan for Any
-		{`"Change"`, Change, nil},
-		{`"Archiver"`, Archiver, nil},
-		{`"Config"`, Config, nil},
-		{`"Producer"`, Producer, nil},
-		{`"Garbage"`, Type(255), ErrInvalidSlotType},
-	}
+	t.Run("success", func(t *testing.T) {
+		tests := []struct{
+			s string
+			t Type
+			e error
+		}{
+			{`"Any"`, Type(255), ErrInvalidSlotType}, // No scan for Any
+			{`"Change"`, Change, nil},
+			{`"Archiver"`, Archiver, nil},
+			{`"Config"`, Config, nil},
+			{`"Producer"`, Producer, nil},
+			{`"Garbage"`, Type(255), ErrInvalidSlotType},
+		}
 
-	for _, x := range tests {
-		var v Type
-		err := json.Unmarshal([]byte(x.s), &v)
-		if x.t == Type(255) {
-			if v != Any || !errors.Is(err, x.e) {
-				t.Errorf("Unmarshal(%v): exp 0/%v, got %v/%v", x.s, x.e, v, err)
-			}
-		} else {
-			if v != x.t || err != nil {
-				t.Errorf("Unmarshal(%v): exp %v/nil, got %v/%v",
-					x.s, x.t, v, err)
+		for _, x := range tests {
+			var v Type
+			err := json.Unmarshal([]byte(x.s), &v)
+			if x.t == Type(255) {
+				if v != Any || !errors.Is(err, x.e) {
+					t.Errorf("Unmarshal(%v): exp 0/%v, got %v/%v",
+						x.s, x.e, v, err)
+				}
+			} else {
+				if v != x.t || err != nil {
+					t.Errorf("Unmarshal(%v): exp %v/nil, got %v/%v",
+						x.s, x.t, v, err)
+				}
 			}
 		}
-	}
+	})
 
-	if err := json.Unmarshal([]byte(`"Change`), (*Type)(nil)); err == nil {
-		t.Error("Unmarshal(`\"Change`): exp error, got nil")
-	}
+	t.Run("nil receiver", func(t *testing.T) {
+		if err := json.Unmarshal([]byte(`"Change`), (*Type)(nil)); err == nil {
+			t.Error("Unmarshal(`\"Change`): exp error, got nil")
+		}
+	})
+
+	t.Run("invalid utf8", func(t *testing.T) {
+		var v Type
+		if err := json.Unmarshal([]byte(`"Chang\xff`), &v); err == nil {
+			t.Error("exp error, got nil")
+		}
+	})
 }
 
 // Local Variables:

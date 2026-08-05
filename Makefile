@@ -15,9 +15,7 @@ V=$(if $(findstring 1,$(TEST_VERBOSE)),-v)
 
 export GOEXPERIMENT=jsonv2
 
-all: $(patsubst %,T%,$(MODS))
-
-# all: $(TRG)
+all: $(patsubst %,T%,$(MODS)) $(TRG)
 
 T%:: %
 	@go test -count=1 -coverprofile $</cover.out $V ./$<

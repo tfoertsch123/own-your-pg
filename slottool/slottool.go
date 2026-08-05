@@ -16,7 +16,12 @@ func (args *Cli) List(m *slot.Mgr) {
 	l := func(nm string) {
 		sl, err := m.Slot(nm)
 		if err != nil {
-			log.Panicf("Could not open slot %s: %v", nm, err)
+			log.Errorf("Could not open slot %s: %v", nm, err)
+			return
+		}
+		if sl == nil {
+			log.Errorf("Slot does not exist: %s", nm)
+			return
 		}
 
 		js, err := sl.AsJSON(slot.WithPidCheck())
