@@ -107,7 +107,7 @@ func (recv *jsonConfig) UnmarshalJSONFrom(dec *jsontext.Decoder) error {
 func (sl Slot) MarshalJSONTo(enc *jsontext.Encoder) error {
 	var pidActive *bool
 	if sl.fh != nil && !sl.skipCheckPidActive {
-		active, err := sl.OwnerActive()
+		_, active, err := sl.GetOwner()
 		if err == nil { // if an error occurs, we simply print null
 			pidActive = &active
 		}

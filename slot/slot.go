@@ -175,8 +175,12 @@ func (m *Mgr) Slot(name string, opts ...SlotOpt) (*Slot, error) {
 }
 
 func (sl *Slot) Close() error {
-	sl.lck.Close()
-	return sl.fh.Close()
+	err := sl.lck.Close()
+	err2 := sl.fh.Close()
+	if err != nil {
+		return err
+	}
+	return err2
 }
 
 func (sl *Slot) SetConfig(k string, v []string) {
@@ -187,7 +191,10 @@ func (sl *Slot) SetConfig(k string, v []string) {
 	}
 }
 
-func (sl *Slot) GetConfig(k string) []string {
+func (sl *Slot) GetConfig(k string, update ...bool) []string {
+	if len(update) > 0 && update[0] {
+		sl.loadCfg()
+	}
 	v, ok := sl.Config[k]
 	if !ok {
 		return nil
@@ -241,19 +248,26 @@ func (sl *Slot) SetType(typ Type, sync bool) error {
 	return nil
 }
 
-// OwnerActive determines if the PID set as OwnerPid is running. It does so
+// GetOwner determines if the PID set as OwnerPid is running. It does so
 // by trying to acquire the lock (flock(2)) on the slot file. If that
 // succeeds the owner process is not running. Otherwise it is.
-func (sl *Slot) OwnerActive() (bool, error) {
+// It returns the OwnerPid, whether or not it is active and an error
+// containing the potential error returned by the locking attempt.
+// The optional update parameter (all but the first value is ignored)
+// indicates whether or not to reload the information from the slot file.
+func (sl *Slot) GetOwner(update ...bool) (int64, bool, error) {
 	if sl.owner {
-		return true, nil
+		return sl.OwnerPid, true, nil
 	}
 	success, err := sl.tryLockPid()
+	if len(update) > 0 && update[0] {
+		sl.loadHeader()
+	}
 	if success {
 		sl.unlockPid()
-		return false, nil
+		return sl.OwnerPid, false, nil
 	}
-	return true, err
+	return sl.OwnerPid, true, err
 }
 
 func (sl *Slot) String() string {
