@@ -17,13 +17,16 @@ export GOEXPERIMENT=jsonv2
 
 all: $(patsubst %,T%,$(MODS)) $(TRG)
 
+bin:
+	mkdir -p bin
+
 T%:: %
 	@go test -count=1 -coverprofile $</cover.out $V ./$<
 	@go tool cover -html=$</cover.out -o $</coverage.html
 	@echo Coverage report in file://$$PWD/$</coverage.html
 
-bin/%:: exe/%/*.go $(EXTRA)
-	mkdir -p bin && go build -o $@ ./exe/$(@F)
+bin/%:: bin exe/%/*.go $(EXTRA)
+	go build -o $@ ./exe/$(@F)
 
 # define DR
 # bin/$1:: dump/$1
