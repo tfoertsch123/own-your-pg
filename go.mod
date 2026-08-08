@@ -23,3 +23,5 @@ require (
 	github.com/philhofer/fwd v1.2.0 // indirect
 	golang.org/x/text v0.35.0 // indirect
 )
+
+replace github.com/tfoertsch123/flock => ../flock

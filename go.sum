@@ -45,8 +45,6 @@ github.com/stretchr/testify v1.8.4/go.mod h1:sz/lmYIOXD/1dqDmKjjqLyZ2RngseejIcXl
 github.com/stretchr/testify v1.9.0/go.mod h1:r2ic/lqez/lEtzL7wO/rwa5dbSLXVDPFyf8C91i36aY=
 github.com/stretchr/testify v1.11.1 h1:7s2iGBzp5EwR7/aIZr8ao5+dra3wiQyKjjFuvgVKu7U=
 github.com/stretchr/testify v1.11.1/go.mod h1:wZwfW3scLgRK+23gO65QZefKpKQRnfz6sD981Nm4B6U=
-github.com/tfoertsch123/flock v1.1.0 h1:ZM19YjXpxHOgQ9y9EI5I8HDrRSIap0WlwMc5/2Yokb4=
-github.com/tfoertsch123/flock v1.1.0/go.mod h1:bJoDKich9Fl7OVvcYjbDvd0jd6Uojs5Rdf5UCu7kBaA=
 github.com/tfoertsch123/linux-ls v0.1.0 h1:AQqLN4S12EcMPKM+IayKDpTJI9k1h4YXQogxmnGsJEw=
 github.com/tfoertsch123/linux-ls v0.1.0/go.mod h1:8vg7tzt7gest3/CsSLvsIv7tz5FWTPzPGOgXR7m89Ag=
 github.com/tfoertsch123/log v0.3.0 h1:sJb7CeGkzmQQlDHrZwRJmHeIWqCBrnVrSFo2jJ522wY=

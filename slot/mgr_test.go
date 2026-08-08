@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 
 	"golang.org/x/sys/unix"
+
+	"github.com/tfoertsch123/flock"
 )
 
 func TestMgr(t *testing.T) {
@@ -66,6 +68,105 @@ func TestMgr(t *testing.T) {
 	if success || err == nil {
 		t.Errorf("lock(): exp false/err, got %v/%v", success, err)
 	}
+}
+
+func TestMgrOptions(t *testing.T) {
+	dir := t.TempDir()
+	enoent := filepath.Join(dir, "ENOENT")
+
+	// ENOENT without any options is tested in TestMgr
+
+	t.Run("WithMgrCheck", func(t *testing.T) {
+		m, err := NewMgr(enoent, WithMgrCheck())
+		if !errors.Is(err, unix.ENOENT) {
+			t.Errorf("NewMgr(%v): exp %s, got %s", enoent, unix.ENOENT, err)
+		}
+		if m != nil {
+			t.Errorf("NewMgr(%v): exp nil, got %v", enoent, m)
+			m.Close()
+		}
+	})
+
+	t.Run("WithMgrCreate parent missing", func(t *testing.T) {
+		m, err := NewMgr(filepath.Join(enoent, "ENOENT"), WithMgrCreate())
+		if !errors.Is(err, unix.ENOENT) {
+			t.Errorf("NewMgr(%v): exp %s, got %s", enoent, unix.ENOENT, err)
+		}
+		if m != nil {
+			t.Errorf("NewMgr(%v): exp nil, got %v", enoent, m)
+			m.Close()
+		}
+	})
+
+	t.Run("WithMgrCreate success", func(t *testing.T) {
+		m, err := NewMgr(enoent, WithMgrCreate())
+		if err != nil {
+			t.Errorf("NewMgr(%v): exp no error, got %s", enoent, err)
+		}
+		if m == nil {
+			t.Errorf("NewMgr(%v): exp manager, got nil", enoent)
+		} else {
+			m.Close()
+		}
+
+		// check the directory
+		finfo, err := os.Stat(enoent)
+		if err != nil {
+			t.Fatalf("NewMgr(%v): Stat: %s", enoent, err)
+		}
+		if !finfo.Mode().IsDir() {
+			t.Errorf("NewMgr(%v): is not a directory", enoent)
+		}
+
+		// if the directory is not empty this will fail (at least on unix)
+		err = os.Remove(enoent)
+		if err != nil {
+			t.Fatalf("NewMgr(%v): Remove: %s", enoent, err)
+		}
+
+		// what if the parent dir is read-only?
+		err = os.Chmod(dir, 0500)
+		defer func(){
+			os.Chmod(dir, 0755)
+		}()
+		if err != nil {
+			t.Fatalf("NewMgr(%v): Chmod(parent): %s", enoent, err)
+		}
+
+		m, err = NewMgr(enoent, WithMgrCreate())
+		if !errors.Is(err, unix.EACCES) {
+			t.Errorf("NewMgr(%v): exp EACCES, got %s", enoent, err)
+		}
+		if m != nil {
+			t.Errorf("NewMgr(%v): exp nil, got %v", enoent, m)
+			m.Close()
+		}
+	})
+
+	t.Run("WithMgrCheck bad Check", func(t *testing.T) {
+		m, err := NewMgr(dir, WithMgrCheck())
+		if err != nil {
+			t.Fatalf("NewMgr(%v): exp success, got %v", dir, err)
+		}
+		defer m.Close()
+
+		err = m.lck.Close()
+		if err != nil {
+			t.Fatalf("NewMgr(%v): lck.Close(), got %v", dir, err)
+		}
+
+		err = m.Check(false)
+		if err == nil {
+			t.Fatalf("NewMgr(%v): lck.Check(false) exp %v, got %v",
+				dir, flock.ErrAlreadyClosed, err)
+		}
+
+		err = m.Check(true)
+		if err == nil {
+			t.Fatalf("NewMgr(%v): lck.Check(true) exp %v, got %v",
+				dir, flock.ErrAlreadyClosed, err)
+		}
+	})
 }
 
 func TestMgrSlots(t *testing.T) {

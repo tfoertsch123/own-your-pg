@@ -143,6 +143,11 @@ func (sl *Slot) saveMagic() error {
 }
 
 func (sl *Slot) saveHeader() error {
+	// range check
+	if err := sl.SlotType.Scan(uint8(sl.SlotType)); err != nil {
+		return ErrInvalidSlotType
+	}
+
 	sl.lockHeaderEx()
 	defer sl.unlockHeader()
 

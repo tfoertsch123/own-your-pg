@@ -18,6 +18,8 @@ import (
 // Out of the 4 slot types, Change, Archiver, Config and Producer, the latter
 // is special. There can only be one producer per working directory at a
 // time. This is represented by a normal flock() on the manager directory.
+// Note, you still can create multiple producer slots if they all use the
+// same manager object.
 // When a Producer slot is opened as owner, this is the first lock taken.
 // This exclusive lock is held for the entire lifetime of the slot.
 
