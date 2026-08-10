@@ -20,6 +20,17 @@ all: $(patsubst %,T%,$(MODS)) $(TRG)
 bin:
 	mkdir -p bin
 
+G%:: %
+	go generate ./$<
+
+Gmsg:: msg/common.tmpl msg/gen/gen.go
+
+Gslot:: slot/cfg.go
+
+Tslot:: Gslot
+
+Tmsg:: Gmsg
+
 T%:: %
 	@go test -count=1 -coverprofile $</cover.out $V ./$<
 	@go tool cover -html=$</cover.out -o $</coverage.html

@@ -1,0 +1,117 @@
+package msg
+
+import (
+	"encoding/json/v2"
+	"reflect"
+
+{{if .Opts.nextlsn -}}
+	"github.com/tfoertsch123/own-your-pg/lsn"
+{{- end}}
+)
+
+{{if .Opts.nextlsn -}}
+func (x *{{.Type}}) GetNextLsn() lsn.LSN {
+	return x.NextLsn
+}
+{{- end}}
+
+{{if .Opts.table -}}
+func (x *{{.Type}}) GetSchema() string {
+	return x.Schema
+}
+
+func (x *{{.Type}}) GetTable() string {
+	return x.Table
+}
+{{- end}}
+
+{{if .Opts.columns -}}
+func (x *{{.Type}}) GetColumns() []COL {
+	if x.DecodedColumns != nil {
+		return x.DecodedColumns
+	}
+	if v, err := DecodeColVector(x.Columns); err == nil {
+		x.DecodedColumns = v
+	}
+	return x.DecodedColumns
+}
+{{- end}}
+
+{{if .Opts.identity -}}
+func (x *{{.Type}}) GetIdentity() []COL {
+	if x.DecodedIdentity != nil {
+		return x.DecodedIdentity
+	}
+	if v, err := DecodeColVector(x.Identity); err == nil {
+		x.DecodedIdentity = v
+	}
+	return x.DecodedIdentity
+}
+{{- end}}
+
+{{if .Opts.identities -}}
+func (x *{{.Type}}) GetIdentities() [][]COL {
+	if x.DecodedIdentities != nil {
+		return x.DecodedIdentities
+	}
+	if v, err := DecodeMColVector(x.Identities); err == nil {
+		x.DecodedIdentities = v
+	}
+	return x.DecodedIdentities
+}
+{{- end}}
+
+{{if .Opts.rows -}}
+func (x *{{.Type}}) GetRows() [][]COL {
+	if x.DecodedRows != nil {
+		return x.DecodedRows
+	}
+	if v, err := DecodeMColVector(x.Rows); err == nil {
+		x.DecodedRows = v
+	}
+	return x.DecodedRows
+}
+{{- end}}
+
+{{if .Opts.msg -}}
+func (x *{{.Type}}) GetTransactional() bool {
+	return x.Transactional
+}
+
+func (x *{{.Type}}) GetPrefix() string {
+	return x.Prefix
+}
+
+func (x *{{.Type}}) GetContent() string {
+	return x.Content
+}
+{{- end}}
+
+{{if .Opts.query -}}
+func (x *{{.Type}}) GetQuery() string {
+	return x.Query
+}
+{{- end}}
+
+func (x *{{.Type}}) IsEqualTo(y Common) bool {
+	yy, ok := y.(*{{.Type}})
+	return ok && reflect.DeepEqual(x, yy)
+}
+
+func (x *{{.Type}}) AsJSON() string {
+	js, _ := json.Marshal(x)
+	return string(js)
+}
+
+func (x *{{.Type}}) String() string {
+	return x.AsJSON()
+}
+
+func New{{.Type}}() *{{.Type}} {
+	return &{{.Type}}{CommonFields: CommonFields{Action: "{{.Type}}"}}
+}
+
+// Local Variables:
+// mode: Go
+// tab-width: 4
+// End:
