@@ -156,6 +156,36 @@ func TestIsNull(t *testing.T) {
 	}
 }
 
+func TestIsEqualTo(t *testing.T) {
+	tests := []struct{
+		l Val
+		other Val
+		b bool
+	}{
+		{Val(jsontext.Null),           Val(jsontext.Null),           true},
+		{Val(jsontext.Null),           Val(jsontext.Bool(true)),     false},
+		{Val(jsontext.Null),           Val(jsontext.Bool(false)),    false},
+		{Val(jsontext.Null),           Val(jsontext.String("t''t")), false},
+		{Val(jsontext.Null),           Val(jsontext.Int(-3)),        false},
+		{Val(jsontext.String("t''t")), Val(jsontext.String("t''t")), true},
+		{Val(jsontext.String("t''t")), Val(jsontext.String("tt")),   false},
+		{Val(jsontext.Int(-3456)),     Val(jsontext.Int(-3456)),     true},
+		{Val(jsontext.Int(-3456)),     Val(jsontext.Int(3456)),      false},
+		{Val(jsontext.Float(-346.3)),  Val(jsontext.Float(-346.3)),  true},
+		{Val(jsontext.Bool(true)),     Val(jsontext.Bool(true)),     true},
+		{Val(jsontext.Bool(false)),    Val(jsontext.Bool(false)),    true},
+		{Val(jsontext.String("aabb")), Val(jsontext.String("aabb")), true},
+	}
+
+	for _, x := range tests {
+		if got := x.l.IsEqualTo(x.other); got != x.b {
+			t.Errorf("<%v.>IsEqualTo(%v): %v != %v",
+				jsontext.Token(x.l).String(), jsontext.Token(x.other).String(),
+				got, x.b)
+		}
+	}
+}
+
 // Local Variables:
 // tab-width: 4
 // End:
