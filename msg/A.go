@@ -13,8 +13,8 @@ type A struct {
 
 func NewAFromC(x *C) *A {
 	a := NewA()
-	a.CommonFields = x.CommonFields
-	a.NextLsn = x.NextLsn
+	// copy fields preserving action
+	a.CommonFields, a.NextLsn, a.Action = x.CommonFields, x.NextLsn, a.Action
 	return a
 }
 

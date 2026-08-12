@@ -1,0 +1,251 @@
+package msg
+
+import (
+	"testing"
+	"github.com/tfoertsch123/own-your-pg/lsn"
+{{if or .Opts.identity .Opts.columns .Opts.rows .Opts.identities}}
+	"encoding/json/jsontext"
+	"github.com/tfoertsch123/own-your-pg/jval"
+{{- end}}
+)
+
+func Test{{.Type}}_gen(t *testing.T) {
+	it := Common(New{{.Type}}())
+
+	l, _ := lsn.ParseLSN("12/13")
+	xid := uint32(4129)
+	ts := "2026-12-32 10:42:56.123456"
+	it.(*{{.Type}}).Lsn = l
+	it.(*{{.Type}}).Xid = &xid
+	it.(*{{.Type}}).Timestamp = &ts
+{{if .Opts.nextlsn}}
+	nl, _ := lsn.ParseLSN("12/113")
+	it.(*{{.Type}}).NextLsn = nl
+{{- end}}
+{{if .Opts.table}}
+	tab, sch := "tab", "sch"
+	it.(*{{.Type}}).Table, it.(*{{.Type}}).Schema = tab, sch
+{{- end}}
+{{if .Opts.identity}}
+	ident := []COL{
+		{Name:"col1",Type:"text",Value:jval.Val(jsontext.String("txt"))},
+		{Name:"col2",Type:"bigint",Value:jval.Val(jsontext.Int(123))},
+	}
+	it.(*{{.Type}}).DecodedIdentity = ident
+{{- end}}
+{{if .Opts.columns}}
+	columns := []COL{
+		{Name:"col1",Type:"text",Value:jval.Val(jsontext.String("txt"))},
+		{Name:"col2",Type:"bigint",Value:jval.Val(jsontext.Int(123))},
+		{Name:"a",Type:"text",Value:jval.Val(jsontext.String("txt"))},
+		{Name:"b",Type:"int",Value:jval.Val(jsontext.String("321"))},
+	}
+	it.(*{{.Type}}).DecodedColumns = columns
+{{- end}}
+{{if .Opts.rows}}
+	rows := [][]COL{
+		{
+			{Name:"col1",Type:"text",Value:jval.Val(jsontext.String("txt"))},
+			{Name:"col2",Type:"bigint",Value:jval.Val(jsontext.Int(123))},
+			{Name:"a",Type:"text",Value:jval.Val(jsontext.String("txt"))},
+			{Name:"b",Type:"int",Value:jval.Val(jsontext.String("321"))},
+		},
+		{
+			{Name:"col1",Type:"text",Value:jval.Val(jsontext.String("222"))},
+			{Name:"col2",Type:"bigint",Value:jval.Val(jsontext.Int(1234))},
+			{Name:"a",Type:"text",Value:jval.Val(jsontext.String("333"))},
+			{Name:"b",Type:"int",Value:jval.Val(jsontext.String("435"))},
+		},
+	}
+	it.(*{{.Type}}).DecodedRows = rows
+{{- end}}
+{{if .Opts.identities}}
+	identities := [][]COL{
+		{
+			{Name:"col1",Type:"text",Value:jval.Val(jsontext.String("txt"))},
+			{Name:"col2",Type:"bigint",Value:jval.Val(jsontext.Int(123))},
+		},
+		{
+			{Name:"col1",Type:"text",Value:jval.Val(jsontext.String("222"))},
+			{Name:"col2",Type:"bigint",Value:jval.Val(jsontext.Int(1234))},
+		},
+	}
+	it.(*{{.Type}}).DecodedIdentities = identities
+{{- end}}
+
+	t.Run("constructor", func(t *testing.T) {
+		it := Common(New{{.Type}}())
+
+		it_, ok := it.(*{{.Type}})
+		if !ok {
+			t.Error("not a *{{.Type}}")
+		}
+
+		if it_.Action != "{{.Type}}" {
+			t.Error("Action is not {{.Type}}")
+		}
+
+		if it.GetAction() != "{{.Type}}" {
+			t.Error("GetAction is not {{.Type}}")
+		}
+
+		if it_.Xid != nil {
+			t.Error("Xid is not nil")
+		}
+
+		if it.GetXid() != 0 {
+			t.Error("GetXid is not 0")
+		}
+
+		if it_.Timestamp != nil {
+			t.Error("Timestamp is not nil")
+		}
+
+		if it.GetTimestamp() != "" {
+			t.Error("GetTimestamp is not ``")
+		}
+
+		if it_.Lsn != lsn.LSN(0) {
+			t.Error("Lsn is not 0/0")
+		}
+
+		if it.GetLsn() != lsn.LSN(0) {
+			t.Error("GetLsn is not 0/0")
+		}
+{{if .Opts.nextlsn}}
+		if it_.NextLsn != lsn.LSN(0) {
+			t.Error("NextLsn is not 0/0")
+		}
+
+		if it_.GetNextLsn() != lsn.LSN(0) {
+			t.Error("GetNextLsn is not 0/0")
+		}
+{{- end}}
+{{if .Opts.table}}
+		if it_.Table != "" {
+			t.Error("Table is not ``")
+		}
+
+		if it_.Schema != "" {
+			t.Error("Schema is not ``")
+		}
+{{- end}}
+{{if .Opts.identity}}
+		if it_.Identity != nil {
+			t.Error("Identity is not nil")
+		}
+		if it_.DecodedIdentity != nil {
+			t.Error("DecodedIdentity is not nil")
+		}
+{{- end}}
+{{if .Opts.columns}}
+		if it_.Columns != nil {
+			t.Error("Columns is not nil")
+		}
+		if it_.DecodedColumns != nil {
+			t.Error("DecodedColumns is not nil")
+		}
+{{- end}}
+{{if .Opts.rows}}
+		if it_.Rows != nil {
+			t.Error("Rows is not nil")
+		}
+		if it_.DecodedRows != nil {
+			t.Error("DecodedRows is not nil")
+		}
+{{- end}}
+{{if .Opts.identities}}
+		if it_.Identities != nil {
+			t.Error("Identities is not nil")
+		}
+		if it_.DecodedIdentities != nil {
+			t.Error("DecodedIdentities is not nil")
+		}
+{{- end}}
+	})
+
+	t.Run("common", func(t *testing.T) {
+		if res := it.GetXid(); res != xid {
+			t.Errorf("GetXid exp %v, got %v", xid, res)
+		}
+
+		if res := it.GetTimestamp(); res != ts {
+			t.Errorf("GetTimestamp exp %q, got %q", ts, res)
+		}
+
+		if res := it.GetLsn(); res != l {
+			t.Errorf("GetLsn exp %v, got %v", l, res)
+		}
+{{if .Opts.nextlsn}}
+		if res := it.(*{{.Type}}).GetNextLsn(); res != nl {
+			t.Errorf("GetNextLsn exp %v, got %v", nl, res)
+		}
+{{- end}}
+{{if .Opts.table}}
+		if res := it.(*{{.Type}}).GetTable(); res != tab {
+			t.Errorf("GetTable exp %v, got %v", tab, res)
+		}
+		if res := it.(*{{.Type}}).GetSchema(); res != sch {
+			t.Errorf("GetSchema exp %v, got %v", sch, res)
+		}
+{{- end}}
+{{if .Opts.identity}}
+		if res := it.(*{{.Type}}).GetIdentity();
+		   !ColVectorEqual(res, ident) {
+			t.Errorf("GetIdentity exp %v, got %v", ident, res)
+		}
+{{- end}}
+{{if .Opts.columns}}
+		if res := it.(*{{.Type}}).GetColumns();
+		   !ColVectorEqual(res, columns) {
+			t.Errorf("GetColumns exp %v, got %v", columns, res)
+		}
+{{- end}}
+	})
+
+	t.Run("json", func(t *testing.T) {
+		js := it.AsJSON()
+		if js[0] != '{' || js[len(js)-1] != '}' {
+			t.Fatalf("AsJSON does not seem to return JSON: <%v>", js)
+		}
+
+		if res := it.String(); res != js {
+			t.Errorf("String(): exp <%v> got <%v>", js, res)
+		}
+
+		clone, err := Parse([]byte(js))
+		if err != nil {
+			t.Fatalf("Parse() failed: %v", err)
+		}
+
+{{if .Opts.columns}}
+		if clone.(*{{.Type}}).DecodedColumns != nil {
+			t.Error("Columns: lazy evaluation")
+		}
+{{- end}}
+{{if .Opts.identity}}
+		if clone.(*{{.Type}}).DecodedIdentity != nil {
+			t.Error("Identity: lazy evaluation")
+		}
+{{- end}}
+{{if .Opts.rows}}
+		if clone.(*{{.Type}}).DecodedRows != nil {
+			t.Error("Rows: lazy evaluation")
+		}
+{{- end}}
+{{if .Opts.identities}}
+		if clone.(*{{.Type}}).DecodedIdentities != nil {
+			t.Error("Identities: lazy evaluation")
+		}
+{{- end}}
+
+		if !it.IsEqualTo(clone) {
+			t.Fatalf("IsEqualTo: exp <%#v>, got <%#v>", it, clone)
+		}
+	})
+}
+
+// Local Variables:
+// mode: Go
+// tab-width: 4
+// End:

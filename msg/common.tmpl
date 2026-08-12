@@ -2,7 +2,6 @@ package msg
 
 import (
 	"encoding/json/v2"
-	"reflect"
 
 {{if .Opts.nextlsn -}}
 	"github.com/tfoertsch123/own-your-pg/lsn"
@@ -95,10 +94,83 @@ func (x *{{.Type}}) GetQuery() string {
 
 func (x *{{.Type}}) IsEqualTo(y Common) bool {
 	yy, ok := y.(*{{.Type}})
-	return ok && reflect.DeepEqual(x, yy)
+
+	if !ok {
+		return false
+	}
+
+	if !(&x.CommonFields).IsEqualTo(&yy.CommonFields) {
+		return false
+	}
+
+	{{if .Opts.nextlsn -}}
+	if x.NextLsn != yy.NextLsn {
+		return false
+	}
+	{{- end}}
+	{{if .Opts.query -}}
+	if x.Query != yy.Query {
+		return false
+	}
+	{{- end}}
+	{{if .Opts.msg -}}
+	if x.Transactional != yy.Transactional ||
+	   x.Prefix != yy.Prefix ||
+	   x.Content != yy.Content {
+		return false
+	}
+	{{- end}}
+	{{if .Opts.table -}}
+	if x.Schema != yy.Schema || x.Table != yy.Table {
+		return false
+	}
+	{{- end}}
+	{{if .Opts.identity -}}
+	if !ColVectorEqual(x.GetIdentity(), yy.GetIdentity()) {
+		return false
+	}
+	{{- end}}
+	{{if .Opts.columns -}}
+	if !ColVectorEqual(x.GetColumns(), yy.GetColumns()) {
+		return false
+	}
+	{{- end}}
+	{{if .Opts.rows -}}
+	if !MColVectorEqual(x.GetRows(), yy.GetRows()) {
+		return false
+	}
+	{{- end}}
+	{{if .Opts.identities -}}
+	if !MColVectorEqual(x.GetIdentities(), yy.GetIdentities()) {
+		return false
+	}
+	{{- end}}
+
+	return true
 }
 
 func (x *{{.Type}}) AsJSON() string {
+	{{if .Opts.identity -}}
+	if x.DecodedIdentity != nil {
+		x.Identity, _ = json.Marshal(x.DecodedIdentity)
+	}
+	{{- end}}
+	{{if .Opts.columns -}}
+	if x.DecodedColumns != nil {
+		x.Columns, _ = json.Marshal(x.DecodedColumns)
+	}
+	{{- end}}
+	{{if .Opts.rows -}}
+	if x.DecodedRows != nil {
+		x.Rows, _ = json.Marshal(x.DecodedRows)
+	}
+	{{- end}}
+	{{if .Opts.identities -}}
+	if x.DecodedIdentities != nil {
+		x.Identities, _ = json.Marshal(x.DecodedIdentities)
+	}
+	{{- end}}
+
 	js, _ := json.Marshal(x)
 	return string(js)
 }

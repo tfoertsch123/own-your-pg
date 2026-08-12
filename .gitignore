@@ -4,5 +4,7 @@ cover.out
 coverage.html
 *_gen.go
 *_gen_test.go
+*_xgen.go
+*_xgen_test.go
 /bin
 /tmp

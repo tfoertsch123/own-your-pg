@@ -25,12 +25,23 @@ func main() {
 		Opts: opts,
 	}
 
-	out, err := os.Create(d.Type + "_gen.go")
+	out, err := os.Create(d.Type + "_xgen.go")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "%v", err)
 		os.Exit(18)
 	}
 	tmpl := template.Must(template.ParseGlob("common.tmpl"))
+	if err := tmpl.Execute(out, d); err != nil {
+		fmt.Fprintf(os.Stderr, "%v", err)
+		os.Exit(19)
+	}
+
+	out, err = os.Create(d.Type + "_xgen_test.go")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "%v", err)
+		os.Exit(18)
+	}
+	tmpl = template.Must(template.ParseGlob("common_test.tmpl"))
 	if err := tmpl.Execute(out, d); err != nil {
 		fmt.Fprintf(os.Stderr, "%v", err)
 		os.Exit(19)

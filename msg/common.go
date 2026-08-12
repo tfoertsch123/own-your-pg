@@ -25,6 +25,14 @@ type CommonFields struct {
 	Lsn lsn.LSN `json:"lsn"`
 }
 
+func (x *CommonFields) IsEqualTo(o *CommonFields) bool {
+	return (x.Xid == nil) == (o.Xid == nil) &&
+		(x.Xid == nil || *x.Xid == *o.Xid) &&
+		(x.Timestamp == nil) == (o.Timestamp == nil) &&
+		(x.Timestamp == nil || *x.Timestamp == *o.Timestamp) &&
+		x.Action == o.Action && x.Lsn == o.Lsn
+}
+
 func (x *CommonFields) GetAction() string {
 	return x.Action
 }
