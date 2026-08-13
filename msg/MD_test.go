@@ -98,6 +98,5 @@ SELECT 1/((SELECT count(*) FROM list)=
 }
 
 // Local Variables:
-// mode: Go
 // tab-width: 4
 // End:

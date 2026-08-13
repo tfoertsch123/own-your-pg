@@ -16,7 +16,9 @@ func TestCommon(t *testing.T) {
 			t.Errorf("Parse: got object: %v", out)
 		}
 	})
-	for _, typ := range []string{"A", "B", "C", "D", "MD", "I", "MI", "M", "S", "T", "U", "Z"} {
+	for _, typ := range []string{
+		"A", "B", "C", "D", "MD", "I", "MI", "M", "S", "T", "U", "Z",
+	} {
 		t.Run("Invalid "+typ, func(t *testing.T) {
 			js := `{"action":"`+typ+`","xid":4129,`+
 				`"timestamp":"2026-12-32 10:42:56.123456","lsn":"x12/13"}`
@@ -32,6 +34,5 @@ func TestCommon(t *testing.T) {
 }
 
 // Local Variables:
-// mode: Go
 // tab-width: 4
 // End:

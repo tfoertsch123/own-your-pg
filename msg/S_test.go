@@ -50,6 +50,5 @@ func TestS(t *testing.T) {
 }
 
 // Local Variables:
-// mode: Go
 // tab-width: 4
 // End:
