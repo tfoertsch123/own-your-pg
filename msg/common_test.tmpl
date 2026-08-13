@@ -72,6 +72,18 @@ func Test{{.Type}}_gen(t *testing.T) {
 	}
 	it.(*{{.Type}}).DecodedIdentities = identities
 {{- end}}
+{{if .Opts.query}}
+	query := `SELECT 'query'`
+	it.(*{{.Type}}).Query = query
+{{- end}}
+{{if .Opts.msg}}
+	transactional := true
+	prefix := "prfx"
+	content := "cntnt"
+	it.(*{{.Type}}).Transactional = transactional
+	it.(*{{.Type}}).Prefix = prefix
+	it.(*{{.Type}}).Content = content
+{{- end}}
 
 	t.Run("constructor", func(t *testing.T) {
 		it := Common(New{{.Type}}())
@@ -162,6 +174,22 @@ func Test{{.Type}}_gen(t *testing.T) {
 			t.Error("DecodedIdentities is not nil")
 		}
 {{- end}}
+{{if .Opts.query}}
+		if it_.Query != "" {
+			t.Error("Query is not ``")
+		}
+{{- end}}
+{{if .Opts.msg}}
+		if it_.Transactional {
+			t.Error("Transactional is not false")
+		}
+		if it_.Prefix != `` {
+			t.Error("Prefix is not ``")
+		}
+		if it_.Content != `` {
+			t.Error("Content is not ``")
+		}
+{{- end}}
 	})
 
 	t.Run("common", func(t *testing.T) {
@@ -199,6 +227,22 @@ func Test{{.Type}}_gen(t *testing.T) {
 		if res := it.(*{{.Type}}).GetColumns();
 		   !ColVectorEqual(res, columns) {
 			t.Errorf("GetColumns exp %v, got %v", columns, res)
+		}
+{{- end}}
+{{if .Opts.query}}
+		if res := it.(*{{.Type}}).GetQuery(); res != query {
+			t.Errorf("GetQuery exp %v, got %v", query, res)
+		}
+{{- end}}
+{{if .Opts.msg}}
+		if res := it.(*{{.Type}}).GetTransactional(); res != transactional {
+			t.Errorf("GetTransactional exp %v, got %v", transactional, res)
+		}
+		if res := it.(*{{.Type}}).GetPrefix(); res != prefix {
+			t.Errorf("GetPrefix exp %v, got %v", prefix, res)
+		}
+		if res := it.(*{{.Type}}).GetContent(); res != content {
+			t.Errorf("GetPrefix exp %v, got %v", content, res)
 		}
 {{- end}}
 	})
@@ -240,8 +284,153 @@ func Test{{.Type}}_gen(t *testing.T) {
 {{- end}}
 
 		if !it.IsEqualTo(clone) {
-			t.Fatalf("IsEqualTo: exp <%#v>, got <%#v>", it, clone)
+			t.Errorf("IsEqualTo: exp <%#v>, got <%#v>", it, clone)
 		}
+
+		clone.(*{{.Type}}).Action = "x"
+		if it.IsEqualTo(clone) {
+			t.Errorf("IsEqualTo: unexpected equality")
+		}
+
+		_, err = Parse([]byte(clone.AsJSON()))
+		if err == nil {
+			t.Error("Parse() unexpectedly succeeded")
+		}
+
+{{if ne .Type `Z`}}
+		clone.(*{{.Type}}).Action = "Z"
+{{- else -}}
+		clone.(*{{.Type}}).Action = "S"
+{{- end}}
+		clone2, err := Parse([]byte(clone.AsJSON()))
+		if err != nil {
+			t.Errorf("Parse(): %v", err)
+		}
+
+		if it.IsEqualTo(clone2) {
+			t.Errorf("IsEqualTo: unexpected equality")
+		}
+
+		clone.(*{{.Type}}).Action = "{{.Type}}"
+		if !it.IsEqualTo(clone) {
+			t.Errorf("Should be equal again")
+		}
+
+{{if .Opts.table}}
+		clone.(*{{.Type}}).Table = "__"
+		if it.IsEqualTo(clone) {
+			t.Errorf("unexpected equality")
+		}
+
+		clone.(*{{.Type}}).Table = tab
+		if !it.IsEqualTo(clone) {
+			t.Errorf("Should be equal again")
+		}
+
+		clone.(*{{.Type}}).Schema = "__"
+		if it.IsEqualTo(clone) {
+			t.Errorf("unexpected equality")
+		}
+
+		clone.(*{{.Type}}).Schema = sch
+		if !it.IsEqualTo(clone) {
+			t.Errorf("Should be equal again")
+		}
+{{- end}}
+{{if .Opts.columns}}
+		clone.(*{{.Type}}).DecodedColumns = nil
+		clone.(*{{.Type}}).Columns = nil
+		if it.IsEqualTo(clone) {
+			t.Errorf("unexpected equality")
+		}
+
+		// Note, we don't restore Columns. DecodedColumns is the truth.
+		clone.(*{{.Type}}).DecodedColumns = columns
+		if !it.IsEqualTo(clone) {
+			t.Errorf("Should be equal again")
+		}
+{{- end}}
+{{if .Opts.identity}}
+		clone.(*{{.Type}}).DecodedIdentity = nil
+		clone.(*{{.Type}}).Identity = nil
+		if it.IsEqualTo(clone) {
+			t.Errorf("unexpected equality")
+		}
+
+		// Note, we don't restore Identity. DecodedIdentity is the truth.
+		clone.(*{{.Type}}).DecodedIdentity = ident
+		if !it.IsEqualTo(clone) {
+			t.Errorf("Should be equal again")
+		}
+{{- end}}
+{{if .Opts.rows}}
+		clone.(*{{.Type}}).DecodedRows = nil
+		clone.(*{{.Type}}).Rows = nil
+		if it.IsEqualTo(clone) {
+			t.Errorf("unexpected equality")
+		}
+
+		// Note, we don't restore Rows. DecodedRows is the truth.
+		clone.(*{{.Type}}).DecodedRows = rows
+		if !it.IsEqualTo(clone) {
+			t.Errorf("Should be equal again")
+		}
+{{- end}}
+{{if .Opts.identities}}
+		clone.(*{{.Type}}).DecodedIdentities = nil
+		clone.(*{{.Type}}).Identities = nil
+		if it.IsEqualTo(clone) {
+			t.Errorf("unexpected equality")
+		}
+
+		// Note, we don't restore Identities. DecodedIdentities is the truth.
+		clone.(*{{.Type}}).DecodedIdentities = identities
+		if !it.IsEqualTo(clone) {
+			t.Errorf("Should be equal again")
+		}
+{{- end}}
+{{if .Opts.query}}
+		clone.(*{{.Type}}).Query = `something else`
+		if it.IsEqualTo(clone) {
+			t.Errorf("unexpected equality")
+		}
+
+		clone.(*{{.Type}}).Query = query
+		if !it.IsEqualTo(clone) {
+			t.Errorf("Should be equal again")
+		}
+{{- end}}
+{{if .Opts.msg}}
+		clone.(*{{.Type}}).Transactional = !clone.(*{{.Type}}).Transactional
+		if it.IsEqualTo(clone) {
+			t.Errorf("unexpected equality")
+		}
+
+		clone.(*{{.Type}}).Transactional = transactional
+		if !it.IsEqualTo(clone) {
+			t.Errorf("Should be equal again")
+		}
+
+		clone.(*{{.Type}}).Prefix = `__`
+		if it.IsEqualTo(clone) {
+			t.Errorf("unexpected equality")
+		}
+
+		clone.(*{{.Type}}).Prefix = prefix
+		if !it.IsEqualTo(clone) {
+			t.Errorf("Should be equal again")
+		}
+
+		clone.(*{{.Type}}).Content = `__`
+		if it.IsEqualTo(clone) {
+			t.Errorf("unexpected equality")
+		}
+
+		clone.(*{{.Type}}).Content = content
+		if !it.IsEqualTo(clone) {
+			t.Errorf("Should be equal again")
+		}
+{{- end}}
 	})
 }
 

@@ -7,7 +7,7 @@ type Z struct {
 }
 
 func (x *Z) ToSQL() string {
-	return `-- EOF`
+	return `/* EOF */`
 }
 
 // Local Variables:

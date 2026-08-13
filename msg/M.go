@@ -10,7 +10,7 @@ type M struct {
 }
 
 func (x *M) ToSQL() string {
-	return "-- ignoring logical message\n"
+	return "/* ignoring logical message */"
 }
 
 // Local Variables:
