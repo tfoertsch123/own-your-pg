@@ -37,7 +37,9 @@ func (sl *Slot) loadMagic() (Magic, error) {
 }
 
 func (sl *Slot) loadHeader() error {
-	sl.lockHeaderSh()
+	if err := sl.lockHeaderSh(); err != nil {
+		return err
+	}
 	defer sl.unlockHeader()
 
 	hdrpos := int64(us.Sizeof(__mag__))
@@ -64,7 +66,9 @@ func (sl *Slot) loadHeader() error {
 }
 
 func (sl *Slot) loadCfg() error {
-	sl.lockCfgSh()
+	if err := sl.lockCfgSh(); err != nil {
+		return err
+	}
 	defer sl.unlockCfg()
 
 	cfgpos := int64(us.Sizeof(__mag__)) + int64(us.Sizeof(sl.header))
@@ -73,7 +77,7 @@ func (sl *Slot) loadCfg() error {
 		return err
 	}
 
-	if eofpos == cfgpos {
+	if eofpos <= cfgpos {
 		sl.Config = map[string][]string{}
 		return nil
 	}
@@ -142,13 +146,10 @@ func (sl *Slot) saveMagic() error {
 	return err
 }
 
-func (sl *Slot) saveHeader() error {
-	// range check
-	if err := sl.SlotType.Scan(uint8(sl.SlotType)); err != nil {
-		return ErrInvalidSlotType
+func (sl *Slot) _saveHeader() error {
+	if err := sl.lockHeaderEx(); err != nil {
+		return err
 	}
-
-	sl.lockHeaderEx()
 	defer sl.unlockHeader()
 
 	hdrpos := int64(us.Sizeof(__mag__))
@@ -157,18 +158,27 @@ func (sl *Slot) saveHeader() error {
 	return err
 }
 
+func (sl *Slot) saveHeader() error {
+	// range check
+	if err := sl.SlotType.Scan(uint8(sl.SlotType)); err != nil {
+		return ErrInvalidSlotType
+	}
+
+	return sl._saveHeader()
+}
+
 func (sl *Slot) saveCfg() error {
 	var bts []byte
 	var err error
 
 	if len(sl.Config) > 0 {
-		bts, err = (&sl.Cfg).MarshalMsg(nil)
-		if err != nil {
-			return err
-		}
+		// this call cannot fail other than OOM
+		bts, _ = (&sl.Cfg).MarshalMsg(nil)
 	}
 
-	sl.lockCfgEx()
+	if err = sl.lockCfgEx(); err != nil {
+		return err
+	}
 	defer sl.unlockCfg()
 
 	cfgpos := int64(us.Sizeof(__mag__)) + int64(us.Sizeof(sl.header))
