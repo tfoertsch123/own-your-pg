@@ -191,15 +191,17 @@ func (sl *Slot) SetConfig(k string, v []string) {
 	}
 }
 
-func (sl *Slot) GetConfig(k string, update ...bool) []string {
+func (sl *Slot) GetConfig(k string, update ...bool) ([]string, error) {
 	if len(update) > 0 && update[0] {
-		sl.loadCfg()
+		if err := sl.loadCfg(); err != nil {
+			return nil, err
+		}
 	}
 	v, ok := sl.Config[k]
 	if !ok {
-		return nil
+		return nil, nil
 	}
-	return v
+	return v, nil
 }
 
 func (sl *Slot) SaveConfig(sync bool) error {
@@ -231,6 +233,15 @@ func (sl *Slot) SetLSN(lsn lsn.LSN, sync bool) error {
 		}
 	}
 	return nil
+}
+
+func (sl *Slot) GetLSN(update ...bool) (lsn.LSN, error) {
+	if len(update) > 0 && update[0] {
+		if err := sl.loadHeader(); err != nil {
+			return 0, err
+		}
+	}
+	return sl.NextLSN, nil
 }
 
 // SetType sets the SlotType field. If sync is true, it writes the slot
@@ -277,6 +288,10 @@ func (sl *Slot) String() string {
 	}
 
 	return s
+}
+
+func (sl *Slot) Name() string {
+	return sl.name
 }
 
 // Local Variables:

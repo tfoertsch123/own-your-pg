@@ -12,15 +12,22 @@
 package main
 
 import (
+	"os"
+	"path/filepath"
 	"github.com/alecthomas/kong"
 	"github.com/tfoertsch123/own-your-pg/slottool"
 )
 
 func main() {
+	_, basename := filepath.Split(os.Args[0])
+
 	var args slottool.Cli
 	kong.Parse(&args,
-		kong.Name("slottool"),
-		kong.Description("Example application demonstrating kong command-line parsing."),
+		kong.Name(basename),
+		kong.Description("A tool to create, list and modify OYPG slots"),
+		kong.Vars{
+			"basename": basename,
+		},
 	)
 
 	args.Run()

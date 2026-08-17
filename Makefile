@@ -15,7 +15,11 @@ V=$(if $(findstring 1,$(TEST_VERBOSE)),-v)
 
 export GOEXPERIMENT=jsonv2
 
-all: $(patsubst %,T%,$(MODS)) $(TRG)
+.PHONY: exe test
+
+test: $(patsubst %,T%,$(MODS))
+
+exe: $(TRG)
 
 bin:
 	mkdir -p bin

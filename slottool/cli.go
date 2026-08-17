@@ -61,16 +61,16 @@ func (c *configItem) UnmarshalText(text []byte) error {
 }
 
 type Cli struct {
-	// Name is the required positional string argument.
+	// Dir specifies the working directory, required.
 	Dir string `arg:"" required:"" help:"Working directory."`
 
-	// Server is optional, short flag -S.
+	// Slot is optional, short flag -S.
 	Slot *string `short:"S" help:"Slot name."`
 
 	// LSN is optional, short flag -l.
 	LSN *lsn.LSN `short:"l" help:"Log sequence number (e.g. 1/FFFFFFFF)."`
 
-	// SlotType is optional, short flag -t.
+	// Type is optional, short flag -t.
 	Type *slot.Type `short:"t" help:"Slot type (Change, Archiver, Config, Producer)."`
 
 	// Configs is a repeated flag, short flag -c.

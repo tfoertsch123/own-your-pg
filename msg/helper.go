@@ -11,6 +11,10 @@ func Qident(nm string) string {
 	return `"`+strings.ReplaceAll(nm, `"`, `""`)+`"`
 }
 
+func QliteralString(nm string) string {
+	return `'`+strings.ReplaceAll(nm, `'`, `''`)+`'`
+}
+
 func names_and_values(cols []COL) ([]string, string) {
 	names := make([]string, len(cols))
 	values := make([]string, len(cols))
