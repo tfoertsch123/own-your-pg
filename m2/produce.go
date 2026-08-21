@@ -127,9 +127,12 @@ func (m *Mon) ConnInit() Next {
 	m.relg.Infof("Plugin of slot %v: %v", m.sn, plugin)
 	m.relg.Infof("Confirmed Flush LSN: %v", confirmedFlushLSN)
 
-	if exp, ok := defaults.M2ExpectedPlugins[plugin]; !(ok && exp) {
+	plugin_opts := []string{}
+	if opt_, ok := defaults.M2ExpectedPlugins[plugin]; !ok {
 		m.shutdown_trg(nil)
 		return m.errPause("plugin not acceptable: %v", plugin)
+	} else {
+		plugin_opts = opt_
 	}
 
 	// check the lsn. If the slot's confirmedFlushLSN is ahead of our
@@ -158,17 +161,7 @@ func (m *Mon) ConnInit() Next {
 		conn,
 		m.sn,
 		pglogrepl.LSN(ourlsn),
-		pglogrepl.StartReplicationOptions{
-			PluginArgs: []string{
-				`"format-version" '2'`,
-				`"include-types" 'true'`,
-				`"include-xids" 'true'`,
-				`"include-timestamp" 'true'`,
-				`"include-lsn" 'true'`,
-				`"include-pk" 'true'`,
-				`"numeric-data-types-as-string" 'true'`,
-			},
-		},
+		pglogrepl.StartReplicationOptions{PluginArgs: plugin_opts},
 	)
 	if err != nil {
 		return m.errPause("StartReplication: %v", err)
