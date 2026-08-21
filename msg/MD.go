@@ -14,6 +14,9 @@ type MD struct {
 	Table string `json:"table"`
 	Identities jsontext.Value `json:"identities"`
 	DecodedIdentities [][]COL `json:"-"`
+	// Pk looks like so: "pk":[{"name":"x","type":"text"}, {...}]
+	// Pk jsontext.Value `json:"identity"`
+	// DecodedPk []COL `json:"-"`
 }
 
 func (x *MD) ToSQL() string {

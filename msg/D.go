@@ -13,6 +13,9 @@ type D struct {
 	Table string `json:"table"`
 	Identity jsontext.Value `json:"identity"`
 	DecodedIdentity []COL `json:"-"`
+	// Pk looks like so: "pk":[{"name":"x","type":"text"}, {...}]
+	// Pk jsontext.Value `json:"identity"`
+	// DecodedPk []COL `json:"-"`
 }
 
 func (x *D) ToSQL() string {

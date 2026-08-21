@@ -11,6 +11,7 @@ var M2ExpectedPlugins map[string]bool = map[string]bool{
 	"wal2json": true,
 	"pgoutput": false,
 }
+const M2FeedbackInterval = 10000 * time.Millisecond
 
 // Local Variables:
 // tab-width: 4

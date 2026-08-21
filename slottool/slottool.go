@@ -16,7 +16,7 @@ func (args *Cli) List(m *slot.Mgr) {
 	l := func(nm string) {
 		sl, err := m.Slot(nm)
 		if err != nil {
-			log.Errorf("Could not open slot %s: %v", nm, err)
+			log.Errorf("Could not open %v", nm, err)
 			return
 		}
 		if sl == nil {
@@ -55,7 +55,7 @@ func (args *Cli) Modify(m *slot.Mgr) {
 
 	sl, err := m.Slot(nm, slo...)
 	if err != nil {
-		log.Panicf("Could not open slot %s: %v", nm, err)
+		log.Panicf("Could not open %v", nm, err)
 	}
 	defer sl.Close()
 

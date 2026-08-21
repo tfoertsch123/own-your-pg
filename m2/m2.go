@@ -1,16 +1,18 @@
 package m2
 
 import (
-	"errors"
-	"strconv"
-	"github.com/alecthomas/units"
-	"github.com/tfoertsch123/log"
-	"github.com/tfoertsch123/own-your-pg/pgmask"
+	"time"
+	"context"
 	"github.com/tfoertsch123/own-your-pg/slot"
-	"github.com/tfoertsch123/own-your-pg/defaults"
-
+	"github.com/tfoertsch123/own-your-pg/lsn"
+	"github.com/tfoertsch123/log"
 	"github.com/jackc/pgx/v5/pgconn"	
 )
+
+type recvStatus struct {
+	wpos lsn.LSN
+	fpos lsn.LSN
+}
 
 type Mon struct {
 	settings map[string]string	// clone of the slotinfo
@@ -22,119 +24,18 @@ type Mon struct {
 	ci string					// primary_slotname
 	sn string					// primary_conninfo
 	conn *pgconn.PgConn
+	recvStat recvStatus			// written by m2 as it writes the file
+	prevStat recvStatus			// written by SendFeedback()
+	nextFeedback time.Time		// when to send the next Feedback
 
-	// sent by readSettings() to indicate a conninfo/slotname change
-	// consumed in connectPG()
-	reinit chan struct{}
+	ignMiss map[string]struct{}	// list of tables where we ignore a missing
+								// identity, loaded lazily
 
-	// will be closed when it's time to exit
-	shutdown chan struct{}
-}
+	// will be cancelled when it's time to exit
+	shutdown_ctx context.Context
+	shutdown_trg context.CancelCauseFunc
 
-func (m *Mon) settingChanged(what string, update bool) (bool, string, error) {
-	new, err := m.sl.GetConfig(what, update)
-	if err != nil {
-		return false, "", err
-	}
-	old, oldExists := m.settings[what]
-
-	if new == nil && !oldExists {
-		return false, "", nil	// neither exists
-	}
-
-	if new != nil && oldExists && new[0] == old {
-		return false, new[0], nil	// no change
-	}
-
-	return true, new[0], nil
-}
-
-var ErrMissingConninfo error = errors.New("primary_conninfo not set")
-var ErrInvalidConninfo error = errors.New("cannot parse primary_conninfo")
-var ErrInvalidLimit error = errors.New("size_limit is invalid")
-func (m *Mon) readSettings(update bool) error {
-	changed, new, err := m.settingChanged("logfile", update)
-	if err != nil {
-		return err
-	}
-
-	if changed || m.lg == nil {
-		if m.lg != nil {
-			m.lg.Close()
-		}
-		if new == "" {
-			log.Warnf("logfile not set. Please use slottool to configure.")
-			m.lg = log.NewC(log.WithTopic("MAIN"))
-		} else {
-			var lopts []log.Opt
-			lopts, err = log.ParseURL(new, func(e error) {
-				err = e
-			})
-			if err != nil {
-				return err
-			}
-			m.lg = log.NewC(append(lopts, log.WithTopic("MAIN"))...)
-			if err != nil {		// Rotate object creation failed
-				return err
-			}
-		}
-		m.relg = m.lg.New(log.WithTopic("RECV"))
-		m.mlg = m.lg.New(log.WithTopic("CAPT"))
-	}
-
-	// since we are not re-reading the slot, no error can occur
-	changed, new, _ = m.settingChanged("primary_conninfo", false)
-	if changed {
-		m.settings["primary_conninfo"] = new
-		if new, err = pgmask.AppendOptionOverride(
-			new,
-			"replication", "database",
-			// wal2json sends a warning if a table without identity
-			// has been updated. See lines L2359-L2383 in
-			// https://github.com/eulerto/wal2json/blob/master/wal2json.c
-			"options", `-cclient_min_messages=warning`,
-		); err != nil {
-			return ErrInvalidConninfo
-		}
-		new, _ = pgmask.AppendOptionIfNotExists(
-			new, "application_name", "OYPG-"+m.sl.Name(),
-		)
-
-		m.ci = new
-		select { case m.reinit <- struct{}{}: default: }
-	} else if new == "" {
-		return ErrMissingConninfo // can only happen at init time
-	}
-
-	changed, new, _ = m.settingChanged("primary_slotname", false)
-	if changed || new == "" {
-		m.settings["primary_slotname"] = new
-		if new == "" {
-			new = m.sl.Name()
-		}
-		if new != m.sn {
-			m.sn = new
-			select { case m.reinit <- struct{}{}: default: }
-		}
-	}
-
-	changed, new, _ = m.settingChanged("size_limit", false)
-	if changed || new == "" && m.maxSize == 0 {
-		if new == "" {
-			new = defaults.M2SizeLimit
-		}
-		if x, err := strconv.ParseUint(new, 10, 64); err == nil {
-			m.maxSize = int64(x)
-			m.settings["size_limit"] = new
-		} else if x, err := units.ParseStrictBytes(new); err == nil {
-			m.maxSize = int64(x)
-			m.settings["size_limit"] = new
-		} else {
-			return ErrInvalidLimit
-		}
-	}
-
-	return nil
+	reload chan struct{}
 }
 
 // Local Variables:

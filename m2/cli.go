@@ -1,6 +1,12 @@
 package m2
 
 import (
+	"os"
+	"os/signal"
+	"fmt"
+	"errors"
+	"syscall"
+	"context"
 	"path/filepath"
 
 	"github.com/tfoertsch123/log"
@@ -16,6 +22,7 @@ type Cli struct {
 	Slot string `short:"S" help:"Slot name." default:"${basename}"`
 }
 
+var ErrShutdown = errors.New("Shutdown ")
 func (cli *Cli) Run() {
 	sd := filepath.Join(cli.Dir, defaults.SlotDir)
 	mgr, err := slot.NewMgr(sd, slot.WithMgrCheck())
@@ -32,18 +39,52 @@ func (cli *Cli) Run() {
 		log.Panicf("%v", err)
 	}
 
+    ctx, cancel := context.WithCancelCause(context.Background())
+    defer cancel(nil)
+
+	shutdownCh := make(chan os.Signal, 1)
+    signal.Notify(shutdownCh, syscall.SIGINT, syscall.SIGTERM)
+
+	reloadCh := make(chan os.Signal, 1)
+    signal.Notify(reloadCh, syscall.SIGHUP)
+
+	reload_chan := make(chan struct{}, 1)
+	
+	// signal loop
+    go func() {
+		defer func() {
+			signal.Stop(shutdownCh)
+			signal.Stop(reloadCh)
+			close(shutdownCh)
+			close(reloadCh)
+		}()
+        for {
+            select {
+            case s := <-shutdownCh:
+				log.Noticef("got signal %v", s)
+                cancel(fmt.Errorf("%s: %w", s, ErrShutdown))
+				signal.Stop(shutdownCh) // one shutdown should be enough
+            case <-reloadCh:
+				select {case reload_chan <- struct{}{}: default:}
+            case <-ctx.Done():
+                return
+            }
+        }
+    }()
+
 	m := Mon{
 		sl: sl,
-		reinit: make(chan struct{}, 1),
-		shutdown: make(chan struct{}, 0),
+		shutdown_ctx: ctx,
+		shutdown_trg: cancel,
+		reload: reload_chan,
 		settings: make(map[string]string, 10),
 	}
-	err = m.readSettings(false)
-	if err != nil {
-		log.Panicf("%v", err)
+
+	for msg := range m.Produce() {
+		m.mlg.Debugf("%#v", msg)
 	}
 
-	m.ConnInit()
+	m.lg.Info("Shutdown complete")	
 }
 
 // Local Variables:
