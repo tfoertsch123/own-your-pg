@@ -3,18 +3,18 @@ package capture
 import (
 	"os"
 	"os/signal"
-	// "fmt"
 	"errors"
 	"syscall"
-	// "context"
 	"path/filepath"
+	"bytes"
 
 	"github.com/jackc/pglogrepl"
 
 	"github.com/tfoertsch123/log"
 	"github.com/tfoertsch123/own-your-pg/slot"
 	"github.com/tfoertsch123/own-your-pg/defaults"
-	cap "github.com/tfoertsch123/own-your-pg/pglogreplsimple"
+	"github.com/tfoertsch123/own-your-pg/lsn"
+	cap "github.com/tfoertsch123/pglogreplsimple"
 )
 
 type Cli struct {
@@ -23,6 +23,25 @@ type Cli struct {
 
 	// Slot is optional, short flag -S.
 	Slot string `short:"S" help:"Slot name." default:"${basename}"`
+}
+
+type Cfg struct {
+	wd string					// only for error messages
+	mgr *slot.Mgr
+	sl *slot.Slot
+	firstTxnLSN *lsn.LSN		// "nextlsn" of first BEGIN in current file
+								// ONLY used to build the history file name
+	boBegin int64				// file pos of the most recent B record
+	eoCommit int64				// file pos right after the most recent C record
+	curr *os.File
+	writer *bytes.Buffer
+
+	logURL string
+	lg *log.Logger
+	mlg *log.Logger				// to be used in the writing part
+	recvP *cap.Param
+	maxSize int64
+	ignMissId []string
 }
 
 var ErrShutdown = errors.New("Shutdown signal")
@@ -43,23 +62,34 @@ func (cli *Cli) Run() {
 	}
 
 	cfg := Cfg{
+		wd: cli.Dir,
+		mgr: mgr,
 		sl: sl,
 	}
+
+	cfg.ensureIncDir()
+
 	_, err = cfg.readSettings(false)
 	if err != nil {
 		log.Panicf("%v", err)
 	}
 
 	cfg.lg.Noticef("Slot: %v", sl)
+
+	startLSN, _ := cfg.sl.GetLSN()
 	m := cap.NewReceiver(
 		cap.WithParams(cfg.recvP),
 		cap.WithAcceptedPlugins(map[string][]string{
-			"wal2json": cap.DefaultPlugins["wal2json"],
+			"wal2json": []string{
+				`"format-version" '2'`,
+				`"include-types" 'true'`,
+				`"include-xids" 'true'`,
+				`"include-timestamp" 'true'`,
+				`"include-lsn" 'true'`,
+				`"numeric-data-types-as-string" 'true'`,
+			},
 		}),
-		cap.WithGetStartLSN(func() pglogrepl.LSN {
-			lsn, _ := cfg.sl.GetLSN()
-			return pglogrepl.LSN(lsn)
-		}),
+		cap.WithStartLSN(pglogrepl.LSN(startLSN)),
 	)
 
 	shutdownCh := make(chan os.Signal, 1)
@@ -92,56 +122,17 @@ func (cli *Cli) Run() {
         }
     }()
 
-	// for msg := range m.Produce(nil) {
-	// 	cfg.mlg.Infof(">> %T", msg)
-	// }
-	// if err = m.Err(); err != nil {
-	// 	cfg.lg.Infof("lastErr: %v", err)	
-	// }
-	i := 0
-	nloops := 0
-	for {
-		nloops++
-		it, err := m.Produce(nil)
-		if err != nil {
-			cfg.lg.Errorf("Produce(): %v", err)
-			break
-		}
-		for msg := range it {
-			cfg.mlg.Infof("%d: loop 1(%d) %T message", nloops, i, msg)
-			i++
-			if i > 10 {
-				break
-			}
-		}
-		cfg.mlg.Infof("%d: loop 1 done", nloops)
+	cfg.curInit()
 
-		cfg.lg.Infof("lastErr: %v", m.Err())	
-		if m.State() == cap.Stop {
-			break
-		}
+	it, err := m.Produce(nil)
+	if err != nil {
+		cfg.lg.Panicf("Produce: %v", err)
+	}
 
-		it, err = m.Produce(nil)
-		if err != nil {
-			cfg.lg.Errorf("Produce(): %v", err)
-			break
-		}
-		for msg := range it {
-			cfg.mlg.Infof("%d: loop 2(%d) %T message", nloops, i, msg)
-			i--
-			if i <= 0 {
-				break
-			}			
-		}
-		cfg.mlg.Infof("%d: loop 2 done", nloops)
-		cfg.lg.Infof("lastErr: %v", m.Err())	
-		if m.State() == cap.Stop {
-			break
-		}
+	cfg.consume(it, m.AckLSN)
 
-		if nloops == 2 {
-			cfg.lg.Infof("m.Close(): %v", m.Close())	
-		}
+	if err = m.Err(); err != nil {
+		cfg.lg.Infof("lastErr: %v", err)
 	}
 
 	cfg.lg.Info("Shutdown complete")	

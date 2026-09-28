@@ -97,6 +97,10 @@ func (m *Mgr) Dir() string {
 	return m.dir
 }
 
+func (m *Mgr) DirFd() int {
+	return m.lck.Fd()
+}
+
 func (m *Mgr) lock() (bool, error) {
 	err := m.lck.TryLockEx()
 	if err == nil {

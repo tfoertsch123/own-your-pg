@@ -2,29 +2,19 @@ package capture
 
 import (
 	"errors"
-	"slices"
 	"strconv"
+	"strings"
 	"github.com/alecthomas/units"
 	"github.com/tfoertsch123/log"
-	"github.com/tfoertsch123/own-your-pg/slot"
 	"github.com/tfoertsch123/own-your-pg/defaults"
-	cap "github.com/tfoertsch123/own-your-pg/pglogreplsimple"
-	"github.com/tfoertsch123/own-your-pg/pglogreplsimple/pgmask"
+	cap "github.com/tfoertsch123/pglogreplsimple"
+	"github.com/tfoertsch123/pgconnstr"
 )
-
-type Cfg struct {
-	sl *slot.Slot
-
-	logURL string
-	lg *log.Logger
-	mlg *log.Logger				// to be used in the writing part
-	recvP *cap.Param
-	maxSize int64
-}
 
 var ErrMissingConninfo error = errors.New("primary_conninfo not set")
 var ErrInvalidConninfo error = errors.New("cannot parse primary_conninfo")
 var ErrInvalidLimit error = errors.New("size_limit is invalid")
+var ErrInvalidSynchronous error = errors.New("synchronous is invalid")
 
 // readSettings returns true if a new Param package needs to be sent
 // to the Receiver
@@ -38,12 +28,14 @@ func (m *Cfg) readSettings(update bool) (bool, error) {
 
 	x, _ := m.sl.GetConfig("primary_conninfo", false)
 	if len(x) >= 1 {
-		if x, err := pgmask.AppendOptionIfNotExists(
-			x[0], "application_name", "OYPG-"+m.sl.Name(),
-		); err != nil {
+		if ci, err := pgconnstr.Parse(x[0]); err != nil {
 			return false, ErrInvalidConninfo
 		} else {
-			new.recvP.ConnInfo = x
+			if _, exists := ci["application_name"]; ! exists {
+				ci["application_name"] = "OYPG-"+m.sl.Name()
+			}
+			ci["options"] = "-cclient_min_messages=warning"
+			new.recvP.ConnInfo = ci.URL()
 		}
 	} else {
 		return false, ErrMissingConninfo
@@ -57,7 +49,7 @@ func (m *Cfg) readSettings(update bool) (bool, error) {
 	}
 
 	x, _ = m.sl.GetConfig("ignore_missing_identity", false)
-	new.recvP.IgnoreMissingIdentity = x
+	new.ignMissId = x
 
 	x, _ = m.sl.GetConfig("size_limit", false)
 	if len(x) == 0 {
@@ -70,6 +62,19 @@ func (m *Cfg) readSettings(update bool) (bool, error) {
 	} else {
 		return false, ErrInvalidLimit
 	}
+
+	feedbackOnFlush := false
+	x, _ = m.sl.GetConfig("synchronous", false)
+	if len(x) >= 1 {
+		switch strings.ToLower(x[0]) {
+		case "on", "true", "1":
+			feedbackOnFlush = true
+		case "off", "false", "0":
+		default:
+			return false, ErrInvalidSynchronous
+		}
+	}
+	new.recvP.FeedbackOnFlush = &feedbackOnFlush
 
 	if m.logURL != new.logURL {
 		if new.logURL == "" {
@@ -93,13 +98,9 @@ func (m *Cfg) readSettings(update bool) (bool, error) {
 		new.mlg = new.lg.New(log.WithTopic("WRT"))
 	}
 
-	// activate the changes
 	if m.logURL != new.logURL ||
 	   m.recvP.ConnInfo != new.recvP.ConnInfo ||
-	   m.recvP.SlotName != new.recvP.SlotName ||
-	   !slices.Equal(
-		   m.recvP.IgnoreMissingIdentity, new.recvP.IgnoreMissingIdentity,
-	   ) {
+	   m.recvP.SlotName != new.recvP.SlotName {	// activate the changes
 		if m.logURL != new.logURL {
 			// we can't close m.lg right now. It might still be used by
 			// cap.Receiver.
@@ -127,10 +128,12 @@ func (m *Cfg) readSettings(update bool) (bool, error) {
 
 		m.recvP = new.recvP
 		m.maxSize = new.maxSize
+		m.ignMissId = new.ignMissId
 		return true, nil
 	} else {
 		// only local changes, nothing related to cap.Receiver
 		m.maxSize = new.maxSize
+		m.ignMissId = new.ignMissId
 		return false, nil
 	}
 }

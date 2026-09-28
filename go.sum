@@ -15,8 +15,8 @@ github.com/hexops/gotextdiff v1.0.3 h1:gitA9+qJrrTCsiCl7+kh75nPqQt1cx4ZkudSTLoUq
 github.com/hexops/gotextdiff v1.0.3/go.mod h1:pSWU5MAI3yDq+fZBTazCSJysOMbxWL1BSow5/V2vxeg=
 github.com/jackc/pgio v1.0.0 h1:g12B9UwVnzGhueNavwioyEEpAmqMe1E/BN9ES+8ovkE=
 github.com/jackc/pgio v1.0.0/go.mod h1:oP+2QK2wFfUWgr+gxjoBH9KGBb31Eio69xUb0w5bYf8=
-github.com/jackc/pglogrepl v0.0.0-20260401131349-e37c41485510 h1:+PJCokZ2BhyDKlncScmiNzBwqOx+yH1i8xRlWN/wn6A=
-github.com/jackc/pglogrepl v0.0.0-20260401131349-e37c41485510/go.mod h1:UzTJ5Jjuf4O9hYWW+HYVwVldYz9J7CaePW0iuNJkrPQ=
+github.com/jackc/pglogrepl v0.0.0-20260824121319-4ae5c490f7ce h1:vbG2mEA3L71+bAfq0pjZ9dykn5hWwVkP9nFuLBtlC/M=
+github.com/jackc/pglogrepl v0.0.0-20260824121319-4ae5c490f7ce/go.mod h1:UzTJ5Jjuf4O9hYWW+HYVwVldYz9J7CaePW0iuNJkrPQ=
 github.com/jackc/pgpassfile v1.0.0 h1:/6Hmqy13Ss2zCq62VdNG8tM1wchn8zjSGOBJ6icpsIM=
 github.com/jackc/pgpassfile v1.0.0/go.mod h1:CEx0iS5ambNFdcRtxPj5JhEz+xB6uRky5eyVu/W2HEg=
 github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 h1:iCEnooe7UlwOQYpKFhBabPMi4aNAfoODPEFNiAnClxo=
@@ -49,6 +49,10 @@ github.com/tfoertsch123/linux-ls v0.1.0 h1:AQqLN4S12EcMPKM+IayKDpTJI9k1h4YXQogxm
 github.com/tfoertsch123/linux-ls v0.1.0/go.mod h1:8vg7tzt7gest3/CsSLvsIv7tz5FWTPzPGOgXR7m89Ag=
 github.com/tfoertsch123/log v0.3.0 h1:sJb7CeGkzmQQlDHrZwRJmHeIWqCBrnVrSFo2jJ522wY=
 github.com/tfoertsch123/log v0.3.0/go.mod h1:IqMSsTI1+BxJ22wOqX6EblfeNDLZpb9EXgftvy5Ean0=
+github.com/tfoertsch123/pgconnstr v0.1.0 h1:aH94bancTqnv9YIkATNft74z6xzZ9s/VsJo6x5on73c=
+github.com/tfoertsch123/pgconnstr v0.1.0/go.mod h1:dgeXW8+/r/6hUKnCTQRFXfR8N3lM1/AHf5GFrGF96os=
+github.com/tfoertsch123/pglogreplsimple v0.1.0 h1:I+JNhR+J1g0pqW8s96yv5kG73bbNEXh9Iu7LpicEIMA=
+github.com/tfoertsch123/pglogreplsimple v0.1.0/go.mod h1:QD0amh1QZvFvLGJur3pBQtMbFi2VDrFar52cWfWH+w8=
 github.com/tinylib/msgp v1.6.4 h1:mOwYbyYDLPj35mkA2BjjYejgJk9BuHxDdvRnb6v2ZcQ=
 github.com/tinylib/msgp v1.6.4/go.mod h1:RSp0LW9oSxFut3KzESt5Voq4GVWyS+PSulT77roAqEA=
 golang.org/x/sync v0.20.0 h1:e0PTpb7pjO8GAtTs2dQ6jYa5BWYlMuX047Dco/pItO4=

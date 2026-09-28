@@ -48,12 +48,12 @@ func TestMarshalJSON_roundtrip(t *testing.T) {
 					string(x.s), x.v.s, v_)
 			}
 		case 'i':
-			if v_ := jsontext.Token(v).Int(); v_ != x.v.i {
+			if v_, _ := jsontext.Token(v).Int(); v_ != x.v.i {
 				t.Errorf("Unmarshal(%v) exp: %v, got: %v",
 					string(x.s), x.v.s, v_)
 			}
 		case 'f':
-			if v_ := jsontext.Token(v).Float(); v_ != x.v.f {
+			if v_ , _:= jsontext.Token(v).Float(); v_ != x.v.f {
 				t.Errorf("Unmarshal(%v) exp: %v, got: %v",
 					string(x.s), x.v.s, v_)
 			}

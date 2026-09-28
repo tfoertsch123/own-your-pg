@@ -5,6 +5,8 @@ import (
 )
 
 const SlotDir = "slots"
+const IncDir = "incomplete"
+const CurFile = "current"
 const M2SizeLimit = "16MiB"
 const M2ErrPause = 5000 * time.Millisecond
 var M2ExpectedPlugins map[string][]string = map[string][]string{
