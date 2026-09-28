@@ -98,6 +98,9 @@ func (m *Mgr) Dir() string {
 }
 
 func (m *Mgr) DirFd() int {
+	if m.lck == nil {
+		return -1
+	}
 	return m.lck.Fd()
 }
 

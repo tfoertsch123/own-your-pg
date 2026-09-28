@@ -5,6 +5,7 @@ import (
 	"os"
 	"errors"
 	"path/filepath"
+	"strconv"
 
 	"golang.org/x/sys/unix"
 
@@ -27,9 +28,33 @@ func TestMgr(t *testing.T) {
 		t.Errorf("Dir(): exp %s, got %s", dir, m.dir)
 	}
 
+	// Before the lock is opened, DirFd() returns -1.
+	if fd := m.DirFd(); fd != -1 {
+		t.Errorf("DirFd() before open: exp -1, got %d", fd)
+	}
+
 	success, err := m.lock()
 	if !success || err != nil {
 		t.Errorf("lock(): exp true/nil, got %v/%v", success, err)
+	}
+
+	// After lock() opens the lock, DirFd() returns a valid fd.
+	fd := m.DirFd()
+	if fd < 0 {
+		t.Errorf("DirFd() after open: exp valid fd, got %d", fd)
+	}
+
+	// The fd should refer to the manager directory.
+	finfo, err := os.Stat(dir)
+	if err != nil {
+		t.Fatalf("Stat(%v): %v", dir, err)
+	}
+	fdInfo, err := os.Stat("/proc/self/fd/" + strconv.Itoa(fd))
+	if err != nil {
+		t.Fatalf("Stat(/proc/self/fd/%d): %v", fd, err)
+	}
+	if !os.SameFile(finfo, fdInfo) {
+		t.Errorf("DirFd(): fd %d does not refer to %v", fd, dir)
 	}
 
 	m2, err := NewMgr(dir)
@@ -56,6 +81,11 @@ func TestMgr(t *testing.T) {
 	err = m2.Close()
 	if err != nil {
 		t.Errorf("Close(m2/2): exp nil, got %v", err)
+	}
+
+	// After Close(), DirFd() returns -1 again.
+	if fd := m2.DirFd(); fd != -1 {
+		t.Errorf("DirFd() after Close: exp -1, got %d", fd)
 	}
 
 	m3, err := NewMgr(filepath.Join(dir, "ENOENT"))
