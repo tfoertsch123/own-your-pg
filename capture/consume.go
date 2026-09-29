@@ -1,8 +1,12 @@
 package capture
 
 import (
-	"encoding/json"
+	jt "encoding/json/jsontext"
+	"encoding/json/v2"
 	"iter"
+	"bytes"
+	"fmt"
+	"io"
 
 	"github.com/jackc/pglogrepl"
 	"github.com/jackc/pgx/v5/pgproto3"
@@ -10,6 +14,110 @@ import (
 	mylsn "github.com/tfoertsch123/own-your-pg/lsn"
 	cap "github.com/tfoertsch123/pglogreplsimple"
 )
+
+type parsed struct {
+	json []byte
+	action string
+	transactional bool
+}
+
+func parseAndAddLsn(data []byte, lsn mylsn.LSN) (*parsed, error) {
+	res := &parsed{}
+	dec := jt.NewDecoder(bytes.NewReader(data))
+
+	var out bytes.Buffer
+	enc := jt.NewEncoder(
+		&out,
+		jt.AllowInvalidUTF8(true),
+		jt.EscapeForHTML(false),
+		jt.EscapeForJS(false),
+		jt.PreserveRawStrings(true),
+	)
+
+	start, err := dec.ReadToken()
+	if err != nil {
+		return nil, err
+	}
+	if start.Kind() != '{' {
+		return nil, fmt.Errorf("expected a JSON object")
+	}
+	if err := enc.WriteToken(start); err != nil {
+		return nil, err
+	}
+
+	for dec.PeekKind() != '}' {
+		key, err := dec.ReadToken()
+		if err != nil {
+			return nil, err
+		}
+		err = enc.WriteToken(key)
+		if err != nil {
+			return nil, err
+		}
+		what := key.String()
+
+		raw, err := dec.ReadValue()
+		if err != nil {
+			return nil, err
+		}
+		err = enc.WriteValue(raw)
+		if err != nil {
+			return nil, err
+		}
+
+		switch what {
+		case "action":
+			err = json.Unmarshal(raw, &res.action)
+			switch res.action {
+			case "B":
+				if err := enc.WriteToken(jt.String("nextlsn")); err != nil {
+					return nil, err
+				}
+				placeholder := "XXXXXXXX/YYYYYYYY"
+				if err := json.MarshalEncode(enc, placeholder); err != nil {
+					return nil, err
+				}
+			case "C":
+				if err := enc.WriteToken(jt.String("nextlsn")); err != nil {
+					return nil, err
+				}
+				if err := json.MarshalEncode(enc, lsn); err != nil {
+					return nil, err
+				}
+			case "M":
+				if err := enc.WriteToken(jt.String("lsn")); err != nil {
+					return nil, err
+				}
+				if err := json.MarshalEncode(enc, lsn); err != nil {
+					return nil, err
+				}
+			}
+		case "transactional":
+			err = json.Unmarshal(raw, &res.transactional)
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	// consume }
+	if _, err := dec.ReadToken(); err != nil {
+		return nil, err
+	}
+	if _, err := dec.ReadToken(); err != io.EOF {
+		if err == nil {
+			err = fmt.Errorf("unexpected data after JSON object")
+		}
+		return nil, err
+	}
+
+	if err := enc.WriteToken(jt.EndObject); err != nil {
+		return nil, err
+	}
+
+	res.json = bytes.TrimSuffix(out.Bytes(), []byte("\n"))
+	return res, nil
+}
 
 func (cfg *Cfg) consume(
 	it iter.Seq[cap.MsgItem],
@@ -60,33 +168,59 @@ func (cfg *Cfg) consume(
 			// WALStart and ServerWALEnd for logical replication.
 			cfg.mlg.Debg2f("XLD>> ServerWALEnd=%v, ServerTime=%v",
 				dat.ServerWALEnd, dat.ServerTime)
-			var jdata interface{}
-			err := json.Unmarshal(dat.WALData, &jdata)
+			// var jdata interface{}
+			// err := json.Unmarshal(dat.WALData, &jdata)
+			jdata, err := parseAndAddLsn(
+				dat.WALData,
+				mylsn.LSN(dat.ServerWALEnd),
+			)
 			if err != nil {
 				cfg.mlg.Panicf("Could not parse JSON content: %v", err)
 			}
 
-			switch v := jdata.(type) {
-			case map[string]interface{}:
-				cfg.mlg.Debg2f("%v", string(dat.WALData))
-				if err = cfg.writeData(dat.WALData); err != nil {
+			// It would be good to get rid of include-lsn. We have "almost"
+			// enough information to do so. ServerWALEnd is transmitted in
+			// the protocol envelope. So, we always have that.
+			// B - ServerWALEnd is the LSN very first time the transaction
+			//     appears in the WAL. "nextlsn" is the position after the
+			//     transaction's COMMIT record.
+			// C - Both, ServerWALEnd and "nextlsn", represent the position
+			//     after the COMMIT record
+			// M - Both, ServerWALEnd and "lsn", represent the position after
+			//     the record. This is only relevant for non-transactional
+			//     messages.
+			// When we read a stream of messages, when we read a B, we need
+			// to decide whether or not to skip the transaction. B/C "nextlsn"
+			// and M "lsn" are perfect for that. They also come in commit
+			// order on the source and represent the same thing as the
+			// ServerWALEnd in a PKAL.
+			// So, we have 3 options:
+			// - keep include-lsn and use B's nextlsn to decide whether or
+			//   not to replay.
+			// - postpone the decision to C. That would mean we need to
+			//   abort a transaction. That's not a good idea.
+			// - since a transaction is never split across multiple files,
+			//   we could insert a placeholder for B's nextlsn and write
+			//   the actual LSN only when the C record is written.
+			cfg.mlg.Debg2f("%v", string(jdata.json))
+			if err = cfg.writeData(jdata.json); err != nil {
+				cfg.mlg.Panicf("Could not write record: %v", err)
+			}
+			switch {
+			case jdata.action == "B":
+				inTxn = true
+			case jdata.action == "C",
+				 jdata.action == "M" && !jdata.transactional:
+				if err = cfg.eoc(
+					mylsn.LSN(dat.ServerWALEnd),
+					jdata.action == "C", // whether or not to write B.nextlsn
+				); err != nil {
 					cfg.mlg.Panicf("Could not write record: %v", err)
 				}
-				switch {
-				case v["action"] == "B":
-					inTxn = true
-				case v["action"] == "C",
-					 v["action"] == "M" && !v["transactional"].(bool):
-					if err = cfg.eoc(mylsn.LSN(dat.ServerWALEnd)); err != nil {
-						cfg.mlg.Panicf("Could not write record: %v", err)
-					}
-					ack(dat.ServerWALEnd)
-					// if we are processing a non-transactional message
-					// this is a no-op.
-					inTxn = false
-				}
-			default:
-				cfg.mlg.Panicf("unexpeced JSON type %[1]T: %[1]v", v)
+				ack(dat.ServerWALEnd)
+				// if we are processing a non-transactional message
+				// this is a no-op.
+				inTxn = false
 			}
 
 		case *pglogrepl.PrimaryKeepaliveMessage:

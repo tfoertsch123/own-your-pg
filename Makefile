@@ -13,7 +13,8 @@ MODS=$(patsubst %/,%,$(sort $(dir $(EXTRA))))
 
 V=$(if $(findstring 1,$(TEST_VERBOSE)),-v)
 
-export GOEXPERIMENT=jsonv2
+# since we are now requiring go1.27.1 jsonv2 is not an experiment anymore
+# export GOEXPERIMENT=jsonv2
 
 .PHONY: exe test
 

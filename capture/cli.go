@@ -85,7 +85,7 @@ func (cli *Cli) Run() {
 				`"include-types" 'true'`,
 				`"include-xids" 'true'`,
 				`"include-timestamp" 'true'`,
-				`"include-lsn" 'true'`,
+				// `"include-lsn" 'true'`,
 				`"numeric-data-types-as-string" 'true'`,
 			},
 		}),

@@ -4,6 +4,7 @@ import (
 	"golang.org/x/sys/unix"
 	"os"
 	"io"
+	"fmt"
 	"errors"
 	"path/filepath"
 	"bytes"
@@ -209,7 +210,7 @@ func (cfg *Cfg) writeData(data []byte) error {
 // flush and sync the buffer. Adjust eoCommit and similar.
 // To be called outside of a transaction only -- after COMMIT or
 // a non-transactional message.
-func (cfg *Cfg) eoc(lsn mylsn.LSN) error {
+func (cfg *Cfg) eoc(lsn mylsn.LSN, writeBLSN bool) error {
 	if cfg.firstTxnLSN == nil {
 		cfg.firstTxnLSN = &lsn
 	}
@@ -227,6 +228,21 @@ func (cfg *Cfg) eoc(lsn mylsn.LSN) error {
 	err = cfg.writeHeader(cfg.curr, eof, cfg.firstTxnLSN)
 	if err != nil {
 		return err
+	}
+
+	if writeBLSN {
+		// cfg.eoCommit still points at the position after the previous
+		// commit. That's our start position.
+		_, err = cfg.curr.WriteAt(
+			[]byte(fmt.Sprintf(
+				`%-*s`,
+				len(`"PPPPPPPP/QQQQQQQQ",`),
+				`"` + lsn.String() + `",`,
+			)),
+			cfg.eoCommit+int64(len(`{"action":"B","nextlsn":`)))
+		if err != nil {
+			return err
+		}
 	}
 
 	err = cfg.curr.Sync()
