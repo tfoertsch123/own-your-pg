@@ -223,13 +223,6 @@ func (cfg *Cfg) eoc(lsn mylsn.LSN, writeBLSN bool) error {
 		return err
 	}
 
-	// cfg.firstTxnLSN is set in consume.go when the first B record is
-	// consumed. Since C always comes after B it should not be nil here.
-	err = cfg.writeHeader(cfg.curr, eof, cfg.firstTxnLSN)
-	if err != nil {
-		return err
-	}
-
 	if writeBLSN {
 		// cfg.eoCommit still points at the position after the previous
 		// commit. That's our start position.
@@ -243,6 +236,13 @@ func (cfg *Cfg) eoc(lsn mylsn.LSN, writeBLSN bool) error {
 		if err != nil {
 			return err
 		}
+	}
+
+	// cfg.firstTxnLSN is set in consume.go when the first B record is
+	// consumed. Since C always comes after B it should not be nil here.
+	err = cfg.writeHeader(cfg.curr, eof, cfg.firstTxnLSN)
+	if err != nil {
+		return err
 	}
 
 	err = cfg.curr.Sync()

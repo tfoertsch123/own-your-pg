@@ -123,53 +123,109 @@ func (cfg *Cfg) consume(
 	it iter.Seq[cap.MsgItem],
 	ack func(pglogrepl.LSN, ...pglogrepl.LSN),
 ) {
-	// We process primary keepalive (PKAL) and XLogData (XLD) messages in
-	// this loop.
-	// XLD messages contain PG transactions in JSON format. PKAL message
-	// inform us about WAL LSN advances on the source that do not generate
-	// logical decoding output.
-	// A transaction always starts with a BEGIN XLD message and ends with
-	// a COMMIT XLD message. For the same transaction these 2 messages
-	// contain a "nextlsn" field with the same value. This value is
-	// comparable with the "ServerWALEnd" field transmitted in a PKAL
-	// message.
-	// With wal2json, a transaction is always transmitted in its entirety
-	// before the next transaction starts. So, the sequence
-	//   Btx1, some content, Btx2, some content, Ctx1, ..., Ctx2
-	// is not possible. It is always
-	//   Btx1, some content, Ctx1, Btx2, some content, Ctx2
+	// We receive 3 types of messages here:
+	// - XLogData (XLD below)
+	// - PrimaryKeepaliveMessage (PKAL below)
+	// - NoticeResponse
 	//
-	// However, PKAL messages can be interleaved in this sequence.
-	// The following sequence is possible:
-	//   B, some content, PKAL, some content, C
-	// Since, B and C records always have the same "nextlsn", we know the
-	// C records "nextlsn" already when we read the B.
-	// The PKAL in this sequence always has PKAL.ServerWALEnd <= C.nextlsn
+	// XLD contain the actual replication payload. PKAL is a means to inform
+	// the client (us) about changes in the WAL position on the source that
+	// do not generate replication data. Think of VACUUM, CREATE INDEX or
+	// changes in a different database in the same cluster.
+	// A NoticeResponse is a rare message informing us about some error
+	// or warning. Notably, wal2json generates such messages when a table
+	// without a replication identity is updated or deleted from. We need
+	// to decide whether or not to proceed after receiving this message.
 	//
-	// So, here is what we do:
-	// - we don't distinguish between write, flush or replay position.
-	//   We don't have the concept of "replay". While a transaction is
-	//   being received it is written to a buffer in RAM which is flushed
-	//   to disk when full. A received COMMIT then flushes an even half-full
-	//   buffer and syncs everything to disk. So, the write and flush
-	//   positions are the same.
-	// - when a BEGIN record arrives, we set inTxn = true
-	// - when a PKAL record arrives and inTxn == true, it is ignored
-	// - when a PKAL record arrives and inTxn == false, our flush position
-	//   is advanced according to PKAL.ServerWALEnd
-	// - when a COMMIT record arrives, we set inTxn = false, flush and sync
-	//   the buffer and advance our flush position to C.nextlsn.
+	// Wal2json transmits one transaction at a time. Transactions are sent
+	// in commit order. A transaction consists of multiple XLD messages.
+	// These messages can be interlaced with PKAL messages.
+	//
+	// A transaction always starts with a BEGIN (B) XLD message and ends with
+	// a COMMIT (C) XLD message. For the transaction order, only the C message
+	// are important. Besides these, the protocol also knows DML messages
+	// like I(nsert), U(pdate), D(elete) or T(runcate). Since these are always
+	// part of a transaction, they appear between a B/C pair. Then the protocol
+	// knows about transactional and non-transactional M(essages).
+	// Transactional M are part of the transaction. So, they appear between
+	// a B/C pair.
+	// Non-transactional M appear outside of a B/C pair. For the following,
+	// M represents a non-transactional message while transactional messages
+	// are grouped with the rest of DML.
+	//
+	// LSN and feedback
+	// ================
+	//
+	// Now, each XLD and PKAL message comes with 2 LSNs in the protocol
+	// envelope, WALStart and ServerWALEnd. For logical replication, they
+	// are ALWAYS the same. So, we only use ServerWALEnd here. This is also
+	// the LSN we need to report back to the source in order to indicate
+	// our progress and to release the WAL at the source database.
+	//
+	// Within a B/C pair, a PKAL can be received. So, this would be possible:
+	//   B, I, U, PKAL, D, C
+	// However, in this scenario PKAL,ServerWALEnd <= C.ServerWALEnd always
+	// holds.
+	//
+	// For transaction/message ordering, only C, M (non-transactional) and
+	// PKAL messages are important. We basically collapse an entire B...C
+	// sequence into a single C event. Now, if X stands for either a
+	// C (the entire transaction) or an M, and we receive the following
+	// sequence:
+	//   X1, X2, PKAL1, X3
+	// then:
+	// - X1.ServerWALEnd < X2.ServerWALEnd < X3.ServerWALEnd
+	// - PKAL1.ServerWALEnd <= X3.ServerWALEnd
+	// - but X2.ServerWALEnd <= PKAL1.ServerWALEnd is NOT necessarily true
+	//
+	// PG distinguishes between write, flush and replay LSN in the feedback
+	// message. We don't. We don't want to lose a transaction even on power
+	// loss. So, we sync every C to disk. Non-transactional messages are not
+	// so important. But they are rare. So, we treat them similar to a
+	// transaction consisting of just one thing.
+	//
+	// With all of this in mind, we:
+	// - advance our feedback LSN on each C or M
+	// - ignore PKAL within a B/C pair
+	// - advance the feedback LSN on PKAL outside of a transaction if
+	//   the PKAL.ServerWALEnd is greater than our feedback LSN
+	//
+	// The B/C/M JSON records
+	// ======================
+	//
+	// We could call wal2json with the "include-lsn" option. It would then
+	// add "lsn" fields to all records and "nextlsn" to B/C records. These
+	// LSNs are almost all overhead. We can derive the important ones
+	// from ServerWALEnd:
+	// - C.nextlsn == C.ServerWALEnd
+	// - M.lsn == M.ServerWALEnd
+	// The only thing that's not nice is the useless B.ServerWALEnd. The
+	// B.nextlsn field contains the subsequent C's ServerWALEnd. However,
+	// for a possible consumer of the files written by us, the ability to
+	// decide whether or not to replay a transaction would be good to make
+	// when the B record is read and not only when C is read.
+	//
+	// In order to accommodate this we do this in parseAndAddLsn():
+	// - add ServerWALEnd as "nextlsn" to every C record.
+	// - add ServerWALEnd as "lsn" to any M record.
+	// - add a placeholder as "nextlsn" to every B record.
+	//
+	// The eoc() function then replaces B's placeholder with the actual
+	// C.ServerWALEnd. This is done BEFORE the file header is updated
+	// with the EOC position.
+	//
+	// Now a reader of our output files can always read up to the currently
+	// published EOC position. It does not matter if the file is a history
+	// file or the current one. If the file is the current one, the reader
+	// should then poll (inotify) the header until the EOC position moves
+	// forward or the file is rotated.
 
 	inTxn := false
 	for msg := range it {
 		switch dat := msg.(type) {
 		case *pglogrepl.XLogData:
-			// As of PG18, WalSndPrepareWrite sends the same value for
-			// WALStart and ServerWALEnd for logical replication.
 			cfg.mlg.Debg2f("XLD>> ServerWALEnd=%v, ServerTime=%v",
 				dat.ServerWALEnd, dat.ServerTime)
-			// var jdata interface{}
-			// err := json.Unmarshal(dat.WALData, &jdata)
 			jdata, err := parseAndAddLsn(
 				dat.WALData,
 				mylsn.LSN(dat.ServerWALEnd),
@@ -178,30 +234,6 @@ func (cfg *Cfg) consume(
 				cfg.mlg.Panicf("Could not parse JSON content: %v", err)
 			}
 
-			// It would be good to get rid of include-lsn. We have "almost"
-			// enough information to do so. ServerWALEnd is transmitted in
-			// the protocol envelope. So, we always have that.
-			// B - ServerWALEnd is the LSN very first time the transaction
-			//     appears in the WAL. "nextlsn" is the position after the
-			//     transaction's COMMIT record.
-			// C - Both, ServerWALEnd and "nextlsn", represent the position
-			//     after the COMMIT record
-			// M - Both, ServerWALEnd and "lsn", represent the position after
-			//     the record. This is only relevant for non-transactional
-			//     messages.
-			// When we read a stream of messages, when we read a B, we need
-			// to decide whether or not to skip the transaction. B/C "nextlsn"
-			// and M "lsn" are perfect for that. They also come in commit
-			// order on the source and represent the same thing as the
-			// ServerWALEnd in a PKAL.
-			// So, we have 3 options:
-			// - keep include-lsn and use B's nextlsn to decide whether or
-			//   not to replay.
-			// - postpone the decision to C. That would mean we need to
-			//   abort a transaction. That's not a good idea.
-			// - since a transaction is never split across multiple files,
-			//   we could insert a placeholder for B's nextlsn and write
-			//   the actual LSN only when the C record is written.
 			cfg.mlg.Debg2f("%v", string(jdata.json))
 			if err = cfg.writeData(jdata.json); err != nil {
 				cfg.mlg.Panicf("Could not write record: %v", err)

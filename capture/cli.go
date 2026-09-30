@@ -74,6 +74,9 @@ func (cli *Cli) Run() {
 		log.Panicf("%v", err)
 	}
 
+	// TODO: read last committed LSN from file and adjust slotLSN if necessary
+	cfg.curInit()
+
 	cfg.lg.Noticef("Slot: %v", sl)
 
 	startLSN, _ := cfg.sl.GetLSN()
@@ -121,8 +124,6 @@ func (cli *Cli) Run() {
             }
         }
     }()
-
-	cfg.curInit()
 
 	it, err := m.Produce(nil)
 	if err != nil {
