@@ -224,8 +224,8 @@ func (cfg *Cfg) consume(
 	for msg := range it {
 		switch dat := msg.(type) {
 		case *pglogrepl.XLogData:
-			cfg.mlg.Debg2f("XLD>> ServerWALEnd=%v, ServerTime=%v",
-				dat.ServerWALEnd, dat.ServerTime)
+			// cfg.mlg.Debg2f("XLD>> ServerWALEnd=%v, ServerTime=%v",
+			// 	dat.ServerWALEnd, dat.ServerTime)
 			jdata, err := parseAndAddLsn(
 				dat.WALData,
 				mylsn.LSN(dat.ServerWALEnd),
@@ -234,7 +234,7 @@ func (cfg *Cfg) consume(
 				cfg.mlg.Panicf("Could not parse JSON content: %v", err)
 			}
 
-			cfg.mlg.Debg2f("%v", string(jdata.json))
+			// cfg.mlg.Debg2f("%v", string(jdata.json))
 			if err = cfg.writeData(jdata.json); err != nil {
 				cfg.mlg.Panicf("Could not write record: %v", err)
 			}
@@ -256,8 +256,8 @@ func (cfg *Cfg) consume(
 			}
 
 		case *pglogrepl.PrimaryKeepaliveMessage:
-			cfg.mlg.Debg2f("PKAL>> WALEnd=%v, Time=%v, ReplyReq=%v",
-				dat.ServerWALEnd, dat.ServerTime, dat.ReplyRequested)
+			// cfg.mlg.Debg2f("PKAL>> WALEnd=%v, Time=%v, ReplyReq=%v",
+			// 	dat.ServerWALEnd, dat.ServerTime, dat.ReplyRequested)
 			if !inTxn {
 				err := cfg.sl.SetLSN(mylsn.LSN(dat.ServerWALEnd), true)
 				if err != nil {
@@ -270,7 +270,7 @@ func (cfg *Cfg) consume(
 			cfg.mlg.Infof("notice>> %v", dat.Message)
 
 		default:
-			cfg.mlg.Infof("SHOULD NOT HAPPEN>> %T", msg)
+			cfg.mlg.Panicf("SHOULD NOT HAPPEN>> %T", msg)
 		}
 	}
 }
