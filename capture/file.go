@@ -360,10 +360,10 @@ func (cfg *Cfg) rotateFile(endlsn mylsn.LSN) error {
 	err1 := unix.Fsync(cfg.histDirFd)
 	err2 := unix.Fsync(cfg.currDirFd)
 	if err1 != nil {
-		return fmt.Errorf("Could sync working directory %w", err)
+		return fmt.Errorf("Could sync working directory %w", err1)
 	}
 	if err2 != nil {
-		return fmt.Errorf("Could sync %v %w", defaults.IncDir, err)
+		return fmt.Errorf("Could sync %v %w", defaults.IncDir, err2)
 	}
 
 	_, err = cfg.newCur()
