@@ -90,6 +90,12 @@ func (m *Cfg) readSettings(update bool) (bool, error) {
 				return false, err
 			}
 			new.lg = log.NewR(append(lopts, log.WithTopic("MAIN"))...)
+			// The error callback passed to log.ParseURL() is called if
+			// the Rotate object possibly needed in log.NewR fails to
+			// be created. NewR historically does not return a value.
+			// But it might need to create a Rotate object which can fail.
+			// The corresponding error is passed to the callback above
+			// which sets the err variable here.
 			if err != nil {		// Rotate object creation failed
 				return false, err
 			}
