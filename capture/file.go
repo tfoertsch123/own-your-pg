@@ -3,15 +3,15 @@ package capture
 import (
 	"golang.org/x/sys/unix"
 	"os"
-	"io"
 	"fmt"
 	"errors"
 	"path/filepath"
 	"bytes"
 	"encoding/binary"
-	"encoding/hex"
+	// "encoding/hex"
 
 	"github.com/tfoertsch123/log"
+	"github.com/tfoertsch123/flock"
 	"github.com/tfoertsch123/own-your-pg/defaults"
 	mylsn "github.com/tfoertsch123/own-your-pg/lsn"
 )
@@ -31,90 +31,146 @@ import (
 // make sure the incoming directory exists
 // We can't use cfg.mlg here. It might not be initialized
 func (cfg *Cfg) ensureIncDir() {
-	err := unix.Mkdirat(
-		cfg.mgr.DirFd(), filepath.Join("..", defaults.IncDir), 0777,
-	)
+	path := filepath.Join("..", defaults.IncDir)
+	err := unix.Mkdirat(cfg.mgr.DirFd(), path, 0777)
 	if err != nil && !errors.Is(err, unix.EEXIST) {
-		log.Panicf("%s: %v", filepath.Join(cfg.wd, defaults.IncDir), err)
+		log.Panicf("Cannot create %s: %v", path, err)
+	}
+
+	cfg.currDirFd, err = unix.Openat(
+		cfg.mgr.DirFd(), path, unix.O_RDONLY | unix.O_DIRECTORY, 0,
+	)
+	if err != nil {
+		log.Panicf("Cannot open %s: %v", defaults.IncDir, err)
+	}
+
+	fd, err := unix.Openat(
+		cfg.currDirFd, defaults.MetaName, unix.O_RDWR | unix.O_CREAT, 0666,
+	)
+	path = filepath.Join(defaults.IncDir, defaults.MetaName)
+	if err != nil {
+		log.Panicf("Cannot open %s: %v", path, err)
+	}
+	cfg.meta = os.NewFile(uintptr(fd), path)
+
+	cfg.histDirFd, err = unix.Openat(
+		cfg.mgr.DirFd(), "..", unix.O_RDONLY | unix.O_DIRECTORY, 0,
+	)
+	if err != nil {
+		log.Panicf("Cannot open working directory: %v", err)
 	}
 }
 
-// This record is located always at the beginning of the output file.
-// The eof value holds the file position right after the last COMMIT
-// record in the file. The header must be fixed length. This function
-// is NOT thread-safe.
-const _hdrdata = `{"C":"CCCCCCCCCCCCCCCC","L":"LLLLLLLLLLLLLLLL"}`+"\n"
-const _hdrend = int64(len(_hdrdata))
-const _hdrCpos int64 = 6		// start of the first C in _hdr
-const _hdrClen int64 = 16		// number of C in _hdr
-const _hdrLpos int64 = _hdrCpos+_hdrClen+7 // start of the first L in _hdr
-const _hdrLlen int64 = 16		// number of L in _hdr
-var _hdr []byte = []byte(_hdrdata)
-func (cfg *Cfg) writeHeader(fh io.WriterAt, epos int64, flsn *mylsn.LSN) error {
-	// fmt.Sprintf() would work too. But it would allocate a new string
-	// every time. Instead we allocate a 8 bytes array and put the bytes
-	// in the correct order (BigEndian) in that buffer. Then we hex-encode
-	// the buffer directly into _hdr.
-	var bts [8]byte
-	binary.BigEndian.PutUint64(bts[:], uint64(epos))
-	hex.Encode(_hdr[_hdrCpos:_hdrCpos+_hdrClen], bts[:])
+// We keep the following metadata while writing the current file.
+// - file position of the end of the latest commit - 64 bits
+// - commit LSN of the first transaction in the file - 64 bits
+//   This is only used to build the history file name. And we only
+//   need to read this information at startup in order to init our
+//   internal data. We could read the same information from the current
+//   file by scanning the first couple of records.
+// - the commit LSN of the last transaction in the file - 64 bits
+//   This is used as our own commit position. Upon startup, this position
+//   takes precedence over the position in the slot if it is ahead of
+//   the slot LSN.
+func (cfg *Cfg) writeMeta(epos int64, flsn *mylsn.LSN, llsn mylsn.LSN) error {
+	var bts [24]byte
+	binary.BigEndian.PutUint64(bts[:8], uint64(epos))
 	if flsn == nil {
-		copy(_hdr[_hdrLpos:_hdrLpos+_hdrLlen], []byte(`LLLLLLLLLLLLLLLL`))
+		binary.BigEndian.PutUint64(bts[8:16], uint64(0))
 	} else {
-		binary.BigEndian.PutUint64(bts[:], uint64(*flsn))
-		hex.Encode(_hdr[_hdrLpos:_hdrLpos+_hdrLlen], bts[:])
+		binary.BigEndian.PutUint64(bts[8:16], uint64(*flsn))
 	}
-	_, err := fh.WriteAt(_hdr, 0)
-	return err
+	binary.BigEndian.PutUint64(bts[16:], uint64(llsn))
+
+	// We rely on this data to be written atomically. I have found various
+	// contradicting sources on this topic. Sqlite claims there is no such
+	// thing as any atomic write gurantee when it comes to physical drives.
+	// A modification in a block that is being written while the power is
+	// being lost can even tamper with the unmodified portion of the block,
+	// https://sqlite.org/psow.html.
+	// On the other hand, postgres simply appends its commit records to the
+	// WAL and fsyncs that. It does not write every commit record into a
+	// separate filesystem block. So, if the Sqlite claim was a real problem,
+	// a power loss could not only damage the transaction currently being
+	// committed but also possibly any other already committed transaction
+	// whose commit WAL record happens to be in the same filesystem block.
+	// This would be a stark violation of PG durability guarantees.
+	_, err := cfg.meta.WriteAt(bts[:], 0)
+	if err != nil {
+		return err
+	}
+
+	return cfg.meta.Sync()
 }
 
-// read the file header and return the eoCommit position
-func (cfg *Cfg) readHeader(fh io.ReaderAt) (int64, *mylsn.LSN, error) {
-	var buf [_hdrend]byte
-	var bts [8]byte
-	_, err := fh.ReadAt(buf[:], 0)
+func (cfg *Cfg) readMeta() (int64, *mylsn.LSN, mylsn.LSN, error) {
+	var bts [24]byte
+	_, err := cfg.meta.ReadAt(bts[:], 0)
 	if err != nil {
-		return 0, nil, err
+		return 0, nil, mylsn.LSN(0), err
 	}
-	_, err = hex.Decode(bts[:], buf[_hdrCpos:_hdrCpos+_hdrClen])
-	if err != nil {
-		return 0, nil, err
-	}
-	eoc := int64(binary.BigEndian.Uint64(bts[:]))
+	eoc := int64(binary.BigEndian.Uint64(bts[:8]))
+	flsn := mylsn.LSN(binary.BigEndian.Uint64(bts[8:16]))
+	llsn := mylsn.LSN(binary.BigEndian.Uint64(bts[16:]))
 
-	if string(buf[_hdrLpos:_hdrLpos+_hdrLlen]) == `LLLLLLLLLLLLLLLL` {
-		cfg.mlg.Debugf("readHeader: eoc = %#x, flsn = %v", eoc, nil)
-		return eoc, nil, nil
+	if flsn == mylsn.LSN(0) {
+		return eoc, nil, llsn, nil
 	}
 
-	_, err = hex.Decode(bts[:], buf[_hdrLpos:_hdrLpos+_hdrLlen])
-	if err != nil {
-		return 0, nil, err
-	}
-	flsn := mylsn.LSN(binary.BigEndian.Uint64(bts[:]))
+	return eoc, &flsn, llsn, nil
+}
 
-	cfg.mlg.Debugf("readHeader: eoc = %#x, flsn = %v", eoc, flsn)
-	return eoc, &flsn, nil
+// this is called by the reveiver's OnConnect function. The connection
+// can be interrupted in the middle of transmitting a transaction. In
+// that case, we want to reset to the most recent commit point. Everything
+// after that is invalid so far and will be retransmitted anyway when we
+// reconnect to the DB. So, we need to truncate the file to the latest
+// commit position and we might need to discard the write buffer content.
+func (cfg *Cfg) truncateToEoc() error {
+	eof, err := cfg.curr.Seek(0, os.SEEK_END)
+	if err != nil {
+		return err
+	}
+
+	if cfg.eoCommit < eof {
+		cfg.mlg.Debugf("Truncation on reconnect: from eof=%v to eoc=%v",
+			eof, cfg.eoCommit)
+		err = cfg.curr.Truncate(cfg.eoCommit)
+		if err != nil {
+			return err
+		}
+		_, err = cfg.curr.Seek(cfg.eoCommit, os.SEEK_SET)
+		if err != nil {
+			return err
+		}
+	} else {
+		cfg.mlg.Debugf("No truncation on reconnect, eof=%v, eoc=%v",
+			eof, cfg.eoCommit)
+	}
+
+	blen := cfg.writer.Len()
+	cfg.writer.Truncate(0)
+
+	cfg.mlg.Debugf("%v bytes discarded from write buffer", blen)
+	return nil
 }
 
 var ErrCurrGarbage = errors.New("current file is garbage")
 
 // create a new and empty incoming/current file
-func (cfg *Cfg) newCur() error {
-	fd, err := unix.Openat(
-		cfg.mgr.DirFd(),
-		filepath.Join("..", defaults.IncDir, defaults.CurFile),
-		unix.O_RDWR | unix.O_CREAT,
-		0666,
+func (cfg *Cfg) newCur() (mylsn.LSN, error) {
+	lck := flock.New(
+		flock.WithCreate(0666),
+		flock.WithRdWr(),
+		flock.WithPathAt(cfg.currDirFd),
+		flock.WithPath(defaults.CurFile),
 	)
+	err := lck.Open()
 	if err != nil {
-		return err
+		return mylsn.LSN(0), err
 	}
 
-	fh := os.NewFile(
-		uintptr(fd),
-		filepath.Join(defaults.IncDir, defaults.CurFile),
-	)
+	fh := lck.File()
 	defer func() {
 		if fh != nil {
 			fh.Close()
@@ -122,22 +178,17 @@ func (cfg *Cfg) newCur() error {
 	}()
 	eof, err := fh.Seek(0, os.SEEK_END)
 	if err != nil {
-		return err
+		return mylsn.LSN(0), err
 	}
 	if eof == 0 {
-		// empty file: write the header and return
-		_, err = fh.Seek(int64(_hdrend), os.SEEK_SET)
+		err = cfg.writeMeta(0, nil, mylsn.LSN(0))
 		if err != nil {
-			return err
-		}
-		err = cfg.writeHeader(fh, _hdrend, nil)
-		if err != nil {
-			return err
+			return mylsn.LSN(0), err
 		}
 		cfg.curr, fh = fh, nil
 		cfg.firstTxnLSN = nil
-		cfg.eoCommit = _hdrend
-		return nil
+		cfg.eoCommit = 0
+		return mylsn.LSN(0), nil
 	}
 
 	// We get here only if the file exist. During normal rotation that
@@ -146,25 +197,24 @@ func (cfg *Cfg) newCur() error {
 	// Find the position after the last commit in the file header.
 	// If the file length (eof) is beyond that position, truncate the file.
 
-	eoc, flsn, err := cfg.readHeader(fh)
+	eoc, flsn, llsn, err := cfg.readMeta()
 	if err != nil {
-		return err
+		return mylsn.LSN(0), err
 	}
 
 	if eoc > eof {				// somebody tampered with the file
-		return ErrCurrGarbage
+		return llsn, ErrCurrGarbage
 	}
 
-	// if eoc == _hdrend but eof is ahead, then no 
 	if eoc < eof {
 		// cut off trailing garbage
 		err = fh.Truncate(eoc)
 		if err != nil {
-			return err
+			return llsn, err
 		}
 		_, err = fh.Seek(eoc, os.SEEK_SET)
 		if err != nil {
-			return err
+			return llsn, err
 		}
 	}
 
@@ -172,13 +222,13 @@ func (cfg *Cfg) newCur() error {
 	cfg.firstTxnLSN = flsn
 	cfg.eoCommit = eoc
 
-	return nil
+	return llsn, nil
 }
 
 // to be called once during initialization
-func (cfg *Cfg) curInit() {
+func (cfg *Cfg) curInit() mylsn.LSN {
 	// create the first current file
-	err := cfg.newCur()
+	llsn, err := cfg.newCur()
 	if err != nil {
 		cfg.mlg.Panicf("%s: %v", filepath.Join(
 			cfg.wd, defaults.IncDir, defaults.CurFile), err,
@@ -188,6 +238,8 @@ func (cfg *Cfg) curInit() {
 	// We allocate a 65kb buffer. But we implement a soft limit of 64kb.
 	// If the buffer grows beyond 64kb, it is flushed.
 	cfg.writer = bytes.NewBuffer(make([]byte, 0, 65*1024))
+
+	return llsn
 }
 
 func (cfg *Cfg) flush() (int64, error) {
@@ -210,6 +262,8 @@ func (cfg *Cfg) writeData(data []byte) error {
 // flush and sync the buffer. Adjust eoCommit and similar.
 // To be called outside of a transaction only -- after COMMIT or
 // a non-transactional message.
+// Calling this function means functionally committing the previous
+// transaction.
 func (cfg *Cfg) eoc(lsn mylsn.LSN, writeBLSN bool) error {
 	if cfg.firstTxnLSN == nil {
 		cfg.firstTxnLSN = &lsn
@@ -218,15 +272,10 @@ func (cfg *Cfg) eoc(lsn mylsn.LSN, writeBLSN bool) error {
 		return err
 	}
 
-	eof, err := cfg.curr.Seek(0, os.SEEK_END)
-	if err != nil {
-		return err
-	}
-
 	if writeBLSN {
 		// cfg.eoCommit still points at the position after the previous
 		// commit. That's our start position.
-		_, err = cfg.curr.WriteAt(
+		_, err := cfg.curr.WriteAt(
 			[]byte(fmt.Sprintf(
 				`%-*s`,
 				len(`"PPPPPPPP/QQQQQQQQ",`),
@@ -238,9 +287,14 @@ func (cfg *Cfg) eoc(lsn mylsn.LSN, writeBLSN bool) error {
 		}
 	}
 
+	eof, err := cfg.curr.Seek(0, os.SEEK_END)
+	if err != nil {
+		return err
+	}
+
 	// cfg.firstTxnLSN is set in consume.go when the first B record is
 	// consumed. Since C always comes after B it should not be nil here.
-	err = cfg.writeHeader(cfg.curr, eof, cfg.firstTxnLSN)
+	err = cfg.writeMeta(eof, cfg.firstTxnLSN, lsn)
 	if err != nil {
 		return err
 	}
@@ -274,6 +328,12 @@ func (cfg *Cfg) eoc(lsn mylsn.LSN, writeBLSN bool) error {
 func (cfg *Cfg) rotateFile(endlsn mylsn.LSN) error {
 	cfg.curr.Close()
 	cfg.curr = nil
+	cfg.currLck = nil
+
+	// rotateFile() is called by eoc() which is called at COMMIT.
+	// So, firstTxnLSN cannot by nil anymore.
+	firstlsn := *cfg.firstTxnLSN
+	cfg.firstTxnLSN = nil
 
 	// AWS S3 allows to start lost files from a specific anchor position.
 	// All files with names greater than the anchor will be listed. If
@@ -291,22 +351,24 @@ func (cfg *Cfg) rotateFile(endlsn mylsn.LSN) error {
 	// the first file that comes up is the one. The same applies to any
 	// LSN smaller than LAST_COMMIT_LSN.
 
-	fn := endlsn.Expanded() + ".." + cfg.firstTxnLSN.Expanded()
+	fn := endlsn.Expanded() + ".." + firstlsn.Expanded()
 
-	err := unix.Renameat(
-		cfg.mgr.DirFd(),
-		filepath.Join("..", defaults.IncDir, defaults.CurFile),
-		cfg.mgr.DirFd(),
-		filepath.Join("..", fn),		
-	)
+	err := unix.Renameat(cfg.currDirFd, defaults.CurFile, cfg.histDirFd, fn)
 	if err != nil {
-		return err
+		return fmt.Errorf("Could not rotate current file %w", err)
+	}
+	err1 := unix.Fsync(cfg.histDirFd)
+	err2 := unix.Fsync(cfg.currDirFd)
+	if err1 != nil {
+		return fmt.Errorf("Could sync working directory %w", err)
+	}
+	if err2 != nil {
+		return fmt.Errorf("Could sync %v %w", defaults.IncDir, err)
 	}
 
-	return cfg.newCur()
+	_, err = cfg.newCur()
+	return err
 }
-
-// TODO: truncate at shutdown
 
 // Local Variables:
 // tab-width: 4
