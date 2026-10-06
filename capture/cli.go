@@ -7,6 +7,7 @@ import (
 	"syscall"
 	"path/filepath"
 	"bytes"
+	"fmt"
 
 	"github.com/jackc/pglogrepl"
 
@@ -26,6 +27,30 @@ type Cli struct {
 	Slot string `short:"S" help:"Slot name." default:"${basename}"`
 }
 
+type Reloadable struct {
+	logURL string
+	recvP *cap.Param
+	maxSize int64
+	ignMissId []string
+}
+
+func (r *Reloadable) String() string {
+	return fmt.Sprintf(
+		"logfile: %v\n" +
+			"primary_conninfo: %v\n" +
+			"primary_slotname: %v\n" +
+			"reconnect_interval: %v\n" +
+			"feedback_interval: %v\n" +
+			"synchronous: %v\n" +
+			"max_size: %v\n" +
+			"ignore_missing_identity: %v\n",
+		r.logURL, r.recvP.ConnInfo, r.recvP.SlotName,
+		r.recvP.ErrorRetryInterval, r.recvP.FeedbackInterval,
+		r.recvP.FeedbackOnFlush,
+		r.maxSize, r.ignMissId,
+	)
+}
+
 type Cfg struct {
 	wd string					// only for error messages
 	mgr *slot.Mgr
@@ -41,12 +66,10 @@ type Cfg struct {
 	currLck *flock.Lock
 	writer *bytes.Buffer
 
-	logURL string
 	lg *log.Logger
 	mlg *log.Logger				// to be used in the writing part
-	recvP *cap.Param
-	maxSize int64
-	ignMissId []string
+
+	Reloadable
 }
 
 var ErrShutdown = errors.New("Shutdown signal")
@@ -75,12 +98,14 @@ func (cli *Cli) Run() {
 
 	cfg.ensureIncDir()
 
-	_, err = cfg.readSettings(false)
+	nCfg, err := cfg.readSettings(false)
 	if err != nil {
 		log.Panicf("%v", err)
 	}
-
-	cfg.lg.Noticef("Slot: %v", sl)
+	err = cfg.applySettings(nCfg, nCfg.recvP)
+	if err != nil {
+		log.Panicf("%v", err)
+	}
 
 	// read last committed LSN from metadata and adjust slotLSN if necessary
 	// The metadata update represents the commit of the data to disk. There
@@ -130,16 +155,12 @@ func (cli *Cli) Run() {
 		}()
         for {
             select {
-            case s := <-shutdownCh:
-				cfg.lg.Infof("got signal %v", s)
+            case <-shutdownCh:
 				m.Shutdown(ErrShutdown)
-            case s := <-reloadCh:
-				cfg.lg.Infof("got signal %v", s)
-				if send, err := cfg.readSettings(true); err != nil {
-					cfg.lg.Errorf("reload: %v", err)
-				} else if send {
-					m.RequestReload(*cfg.recvP)
-				}
+            case <-reloadCh:
+				m.RequestReload(
+					*cfg.prepareReload(cfg.readSettings(true)),
+				)
             }
         }
     }()

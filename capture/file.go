@@ -3,6 +3,7 @@ package capture
 import (
 	"golang.org/x/sys/unix"
 	"os"
+	"io"
 	"fmt"
 	"errors"
 	"path/filepath"
@@ -107,6 +108,9 @@ func (cfg *Cfg) readMeta() (int64, *mylsn.LSN, mylsn.LSN, error) {
 	var bts [24]byte
 	_, err := cfg.meta.ReadAt(bts[:], 0)
 	if err != nil {
+		if err == io.EOF {
+			err = ErrMetaGarbage
+		}
 		return 0, nil, mylsn.LSN(0), err
 	}
 	eoc := int64(binary.BigEndian.Uint64(bts[:8]))
@@ -127,7 +131,7 @@ func (cfg *Cfg) readMeta() (int64, *mylsn.LSN, mylsn.LSN, error) {
 // reconnect to the DB. So, we need to truncate the file to the latest
 // commit position and we might need to discard the write buffer content.
 func (cfg *Cfg) truncateToEoc() error {
-	eof, err := cfg.curr.Seek(0, os.SEEK_END)
+	eof, err := cfg.curr.Seek(0, io.SeekEnd)
 	if err != nil {
 		return err
 	}
@@ -139,7 +143,7 @@ func (cfg *Cfg) truncateToEoc() error {
 		if err != nil {
 			return err
 		}
-		_, err = cfg.curr.Seek(cfg.eoCommit, os.SEEK_SET)
+		_, err = cfg.curr.Seek(cfg.eoCommit, io.SeekStart)
 		if err != nil {
 			return err
 		}
@@ -156,6 +160,7 @@ func (cfg *Cfg) truncateToEoc() error {
 }
 
 var ErrCurrGarbage = errors.New("current file is garbage")
+var ErrMetaGarbage = errors.New("metadata file is garbage")
 
 // create a new and empty incoming/current file
 func (cfg *Cfg) newCur() (mylsn.LSN, error) {
@@ -176,7 +181,7 @@ func (cfg *Cfg) newCur() (mylsn.LSN, error) {
 			fh.Close()
 		}
 	}()
-	eof, err := fh.Seek(0, os.SEEK_END)
+	eof, err := fh.Seek(0, io.SeekEnd)
 	if err != nil {
 		return mylsn.LSN(0), err
 	}
@@ -185,7 +190,7 @@ func (cfg *Cfg) newCur() (mylsn.LSN, error) {
 		if err != nil {
 			return mylsn.LSN(0), err
 		}
-		cfg.curr, fh = fh, nil
+		cfg.currLck, cfg.curr, fh = lck, fh, nil
 		cfg.firstTxnLSN = nil
 		cfg.eoCommit = 0
 		return mylsn.LSN(0), nil
@@ -212,13 +217,13 @@ func (cfg *Cfg) newCur() (mylsn.LSN, error) {
 		if err != nil {
 			return llsn, err
 		}
-		_, err = fh.Seek(eoc, os.SEEK_SET)
+		_, err = fh.Seek(eoc, io.SeekStart)
 		if err != nil {
 			return llsn, err
 		}
 	}
 
-	cfg.curr, fh = fh, nil
+	cfg.currLck, cfg.curr, fh = lck, fh, nil
 	cfg.firstTxnLSN = flsn
 	cfg.eoCommit = eoc
 
@@ -287,7 +292,7 @@ func (cfg *Cfg) eoc(lsn mylsn.LSN, writeBLSN bool) error {
 		}
 	}
 
-	eof, err := cfg.curr.Seek(0, os.SEEK_END)
+	eof, err := cfg.curr.Seek(0, io.SeekEnd)
 	if err != nil {
 		return err
 	}
