@@ -16,6 +16,8 @@ V=$(if $(findstring 1,$(TEST_VERBOSE)),-v)
 # since we are now requiring go1.27.1 jsonv2 is not an experiment anymore
 # export GOEXPERIMENT=jsonv2
 
+export OYPG_TEST_CONNINFO=postgres://postgres:pwp@127.0.0.1:5440/test
+
 .PHONY: exe test
 
 test: $(patsubst %,T%,$(MODS))
