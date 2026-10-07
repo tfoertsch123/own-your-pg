@@ -13,23 +13,23 @@ import (
 
 // readSettings reads the slot and returns a new *reloadable parameter package
 // or an error.
-// readSettings must not access anything other than m.sl, not even a logger.
+// readSettings must not access anything other than s.sl, not even a logger.
 // It can be called by a separate go routine.
-func (m *session) readSettings(update bool) (*reloadable, error) {
+func (s *session) readSettings(update bool) (*reloadable, error) {
 	nCfg := &reloadable{recvP: &cap.Param{}}
-	if x, err := m.sl.GetConfig("logfile", update); err != nil {
+	if x, err := s.sl.GetConfig("logfile", update); err != nil {
 		return nCfg, err
 	} else if len(x) >= 1 {
 		nCfg.logURL = x[0]
 	}
 
-	x, _ := m.sl.GetConfig("primary_conninfo", false)
+	x, _ := s.sl.GetConfig("primary_conninfo", false)
 	if len(x) >= 1 {
 		if ci, err := pgconnstr.Parse(x[0]); err != nil {
 			return nCfg, ErrInvalidConninfo
 		} else {
 			if _, exists := ci["application_name"]; ! exists {
-				ci["application_name"] = "OYPG-"+m.sl.Name()
+				ci["application_name"] = "OYPG-"+s.sl.Name()
 			}
 			ci["options"] = "--client_min_messages=warning " +
 				"--log_min_duration_statement=0"
@@ -39,17 +39,17 @@ func (m *session) readSettings(update bool) (*reloadable, error) {
 		return nCfg, ErrMissingConninfo
 	}
 
-	x, _ = m.sl.GetConfig("primary_slotname", false)
+	x, _ = s.sl.GetConfig("primary_slotname", false)
 	if len(x) >= 1 {
 		nCfg.recvP.SlotName = x[0]
 	} else {
-		nCfg.recvP.SlotName = m.sl.Name()
+		nCfg.recvP.SlotName = s.sl.Name()
 	}
 
-	x, _ = m.sl.GetConfig("ignore_missing_identity", false)
+	x, _ = s.sl.GetConfig("ignore_missing_identity", false)
 	nCfg.ignMissId = x
 
-	x, _ = m.sl.GetConfig("size_limit", false)
+	x, _ = s.sl.GetConfig("size_limit", false)
 	if len(x) == 0 {
 		x = append(x, defaults.M2SizeLimit)
 	}
@@ -62,7 +62,7 @@ func (m *session) readSettings(update bool) (*reloadable, error) {
 	}
 
 	feedbackOnFlush := false
-	x, _ = m.sl.GetConfig("synchronous", false)
+	x, _ = s.sl.GetConfig("synchronous", false)
 	if len(x) >= 1 {
 		switch strings.ToLower(x[0]) {
 		case "on", "true", "1":
@@ -82,29 +82,29 @@ func (m *session) readSettings(update bool) (*reloadable, error) {
 
 // called by the reload signal handler in a separate go routine.
 // sets the OnActivation handler
-func (m *session) prepareReload(nCfg *reloadable, err error) *cap.Param {
+func (s *session) prepareReload(nCfg *reloadable, err error) *cap.Param {
 	nCfg.recvP.OnActivation = func(p *cap.Param) error {
 		if err != nil {
 			return err
 		}
-		return m.applySettings(nCfg, p)
+		return s.applySettings(nCfg, p)
 	}
 	return nCfg.recvP
 }
 
 // this is called by the receiver (cap) object in the main go routine. It
-// can access all the fields in m. The passed in recvP is not the same as
+// can access all the fields in s. The passed in recvP is not the same as
 // nCfg.revcP. Logically it is but it has been copied somewhere along the
 // way. So, changes must be made there.
-func (m *session) applySettings(nCfg *reloadable, recvP *cap.Param) error {
+func (s *session) applySettings(nCfg *reloadable, recvP *cap.Param) error {
 	ret := cap.ErrNoChange
-	if m.logURL != nCfg.logURL ||
-	   m.recvP.ConnInfo != recvP.ConnInfo ||
-	   m.recvP.SlotName != recvP.SlotName ||
-	   m.recvP.ErrorRetryInterval != recvP.ErrorRetryInterval ||
-	   m.recvP.FeedbackInterval != recvP.FeedbackInterval ||
-	   m.recvP.FeedbackOnFlush != recvP.FeedbackOnFlush {
-		if m.logURL != nCfg.logURL {
+	if s.logURL != nCfg.logURL ||
+	   s.recvP.ConnInfo != recvP.ConnInfo ||
+	   s.recvP.SlotName != recvP.SlotName ||
+	   s.recvP.ErrorRetryInterval != recvP.ErrorRetryInterval ||
+	   s.recvP.FeedbackInterval != recvP.FeedbackInterval ||
+	   s.recvP.FeedbackOnFlush != recvP.FeedbackOnFlush {
+		if s.logURL != nCfg.logURL {
 			// first we create the new logger. This can fail. So, don't
 			// modify any global data yet.
 			var newLogger *log.Logger
@@ -135,10 +135,10 @@ func (m *session) applySettings(nCfg *reloadable, recvP *cap.Param) error {
 			// At this point we can't fail anymore. So, it's save to close
 			// the old loggers.
 
-			// We can't close m.lg right now. It might still be used by
+			// We can't close s.lg right now. It might still be used by
 			// cap.Receiver.
-			if m.lg != nil {
-				oldLogger := m.lg
+			if s.lg != nil {
+				oldLogger := s.lg
 				c := make(chan struct{}, 0)
 				go func() {
 					<- c
@@ -148,19 +148,19 @@ func (m *session) applySettings(nCfg *reloadable, recvP *cap.Param) error {
 				recvP.CloseOnActivation = c
 			}
 
-			m.lg = newLogger
+			s.lg = newLogger
 			recvP.Logger = newLogger.New(log.WithTopic("RCV"))
-			m.mlg = newLogger.New(log.WithTopic("WRT"))
+			s.mlg = newLogger.New(log.WithTopic("WRT"))
 
-			m.logURL = nCfg.logURL
+			s.logURL = nCfg.logURL
 		}
 
 		ret = nil
 		nCfg.recvP = recvP
 	}
-	m.reloadable = *nCfg
+	s.reloadable = *nCfg
 
-	m.lg.Infof("Reload Parameters:\n%v", nCfg)
+	s.lg.Infof("Reload Parameters:\n%v", nCfg)
 	return ret
 }
 

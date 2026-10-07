@@ -119,7 +119,7 @@ func parseAndAddLsn(data []byte, lsn mylsn.LSN) (*parsed, error) {
 	return res, nil
 }
 
-func (cfg *session) consume(
+func (s *session) consume(
 	it iter.Seq[cap.MsgItem],
 	ack func(pglogrepl.LSN, ...pglogrepl.LSN),
 ) {
@@ -224,30 +224,30 @@ func (cfg *session) consume(
 	for msg := range it {
 		switch dat := msg.(type) {
 		case *pglogrepl.XLogData:
-			// cfg.mlg.Debg2f("XLD>> ServerWALEnd=%v, ServerTime=%v",
+			// s.mlg.Debg2f("XLD>> ServerWALEnd=%v, ServerTime=%v",
 			// 	dat.ServerWALEnd, dat.ServerTime)
 			jdata, err := parseAndAddLsn(
 				dat.WALData,
 				mylsn.LSN(dat.ServerWALEnd),
 			)
 			if err != nil {
-				cfg.mlg.Panicf("Could not parse JSON content: %v", err)
+				s.mlg.Panicf("Could not parse JSON content: %v", err)
 			}
 
-			// cfg.mlg.Debg2f("%v", string(jdata.json))
-			if err = cfg.writeData(jdata.json); err != nil {
-				cfg.mlg.Panicf("Could not write record: %v", err)
+			// s.mlg.Debg2f("%v", string(jdata.json))
+			if err = s.writeData(jdata.json); err != nil {
+				s.mlg.Panicf("Could not write record: %v", err)
 			}
 			switch {
 			case jdata.action == "B":
 				inTxn = true
 			case jdata.action == "C",
 				 jdata.action == "M" && !jdata.transactional:
-				if err = cfg.eoc(
+				if err = s.eoc(
 					mylsn.LSN(dat.ServerWALEnd),
 					jdata.action == "C", // whether or not to write B.nextlsn
 				); err != nil {
-					cfg.mlg.Panicf("Could not write record: %v", err)
+					s.mlg.Panicf("Could not write record: %v", err)
 				}
 				ack(dat.ServerWALEnd)
 				// if we are processing a non-transactional message
@@ -256,21 +256,21 @@ func (cfg *session) consume(
 			}
 
 		case *pglogrepl.PrimaryKeepaliveMessage:
-			// cfg.mlg.Debg2f("PKAL>> WALEnd=%v, Time=%v, ReplyReq=%v",
+			// s.mlg.Debg2f("PKAL>> WALEnd=%v, Time=%v, ReplyReq=%v",
 			// 	dat.ServerWALEnd, dat.ServerTime, dat.ReplyRequested)
 			if !inTxn {
-				err := cfg.sl.SetLSN(mylsn.LSN(dat.ServerWALEnd), true)
+				err := s.sl.SetLSN(mylsn.LSN(dat.ServerWALEnd), true)
 				if err != nil {
-					cfg.mlg.Panicf("Could update slot LSN: %v", err)
+					s.mlg.Panicf("Could update slot LSN: %v", err)
 				}
 				ack(dat.ServerWALEnd)
 			}
 
 		case *pgproto3.NoticeResponse:
-			cfg.mlg.Infof("notice>> %v", dat.Message)
+			s.mlg.Infof("notice>> %v", dat.Message)
 
 		default:
-			cfg.mlg.Panicf("SHOULD NOT HAPPEN>> %T", msg)
+			s.mlg.Panicf("SHOULD NOT HAPPEN>> %T", msg)
 		}
 	}
 }

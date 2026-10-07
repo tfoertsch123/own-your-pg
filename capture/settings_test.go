@@ -40,8 +40,8 @@ func newTestSlot(t *testing.T, name string, cfgs map[string][]string) (*slot.Mgr
 
 func TestReadSettings_MissingConninfo(t *testing.T) {
 	_, sl := newTestSlot(t, "testslot", nil)
-	cfg := &session{sl: sl}
-	_, err := cfg.readSettings(false)
+	s := &session{sl: sl}
+	_, err := s.readSettings(false)
 	if err != ErrMissingConninfo {
 		t.Errorf("got %v, want %v", err, ErrMissingConninfo)
 	}
@@ -51,8 +51,8 @@ func TestReadSettings_InvalidConninfo(t *testing.T) {
 	_, sl := newTestSlot(t, "testslot", map[string][]string{
 		"primary_conninfo": {"!!!invalid!!!"},
 	})
-	cfg := &session{sl: sl}
-	_, err := cfg.readSettings(false)
+	s := &session{sl: sl}
+	_, err := s.readSettings(false)
 	if err != ErrInvalidConninfo {
 		t.Errorf("got %v, want %v", err, ErrInvalidConninfo)
 	}
@@ -62,8 +62,8 @@ func TestReadSettings_ValidConninfo(t *testing.T) {
 	_, sl := newTestSlot(t, "testslot", map[string][]string{
 		"primary_conninfo": {"host=localhost port=5432"},
 	})
-	cfg := &session{sl: sl}
-	nCfg, err := cfg.readSettings(false)
+	s := &session{sl: sl}
+	nCfg, err := s.readSettings(false)
 	if err != nil {
 		t.Fatalf("readSettings: %v", err)
 	}
@@ -80,8 +80,8 @@ func TestReadSettings_ApplicationNamePreserved(t *testing.T) {
 	_, sl := newTestSlot(t, "testslot", map[string][]string{
 		"primary_conninfo": {"host=localhost application_name=myapp"},
 	})
-	cfg := &session{sl: sl}
-	nCfg, err := cfg.readSettings(false)
+	s := &session{sl: sl}
+	nCfg, err := s.readSettings(false)
 	if err != nil {
 		t.Fatalf("readSettings: %v", err)
 	}
@@ -99,8 +99,8 @@ func TestReadSettings_DefaultSlotName(t *testing.T) {
 	_, sl := newTestSlot(t, "myslot", map[string][]string{
 		"primary_conninfo": {"host=localhost"},
 	})
-	cfg := &session{sl: sl}
-	nCfg, err := cfg.readSettings(false)
+	s := &session{sl: sl}
+	nCfg, err := s.readSettings(false)
 	if err != nil {
 		t.Fatalf("readSettings: %v", err)
 	}
@@ -114,8 +114,8 @@ func TestReadSettings_ExplicitSlotName(t *testing.T) {
 		"primary_conninfo": {"host=localhost"},
 		"primary_slotname": {"explicit_slot"},
 	})
-	cfg := &session{sl: sl}
-	nCfg, err := cfg.readSettings(false)
+	s := &session{sl: sl}
+	nCfg, err := s.readSettings(false)
 	if err != nil {
 		t.Fatalf("readSettings: %v", err)
 	}
@@ -129,8 +129,8 @@ func TestReadSettings_DefaultSizeLimit(t *testing.T) {
 	_, sl := newTestSlot(t, "testslot", map[string][]string{
 		"primary_conninfo": {"host=localhost"},
 	})
-	cfg := &session{sl: sl}
-	nCfg, err := cfg.readSettings(false)
+	s := &session{sl: sl}
+	nCfg, err := s.readSettings(false)
 	if err != nil {
 		t.Fatalf("readSettings: %v", err)
 	}
@@ -145,8 +145,8 @@ func TestReadSettings_SizeLimitNumeric(t *testing.T) {
 		"primary_conninfo": {"host=localhost"},
 		"size_limit":       {"1024"},
 	})
-	cfg := &session{sl: sl}
-	nCfg, err := cfg.readSettings(false)
+	s := &session{sl: sl}
+	nCfg, err := s.readSettings(false)
 	if err != nil {
 		t.Fatalf("readSettings: %v", err)
 	}
@@ -160,8 +160,8 @@ func TestReadSettings_SizeLimitHuman(t *testing.T) {
 		"primary_conninfo": {"host=localhost"},
 		"size_limit":       {"4MiB"},
 	})
-	cfg := &session{sl: sl}
-	nCfg, err := cfg.readSettings(false)
+	s := &session{sl: sl}
+	nCfg, err := s.readSettings(false)
 	if err != nil {
 		t.Fatalf("readSettings: %v", err)
 	}
@@ -176,8 +176,8 @@ func TestReadSettings_InvalidSizeLimit(t *testing.T) {
 		"primary_conninfo": {"host=localhost"},
 		"size_limit":       {"garbage"},
 	})
-	cfg := &session{sl: sl}
-	_, err := cfg.readSettings(false)
+	s := &session{sl: sl}
+	_, err := s.readSettings(false)
 	if err != ErrInvalidLimit {
 		t.Errorf("got %v, want %v", err, ErrInvalidLimit)
 	}
@@ -190,8 +190,8 @@ func TestReadSettings_SynchronousOn(t *testing.T) {
 				"primary_conninfo": {"host=localhost"},
 				"synchronous":      {val},
 			})
-			cfg := &session{sl: sl}
-			nCfg, err := cfg.readSettings(false)
+			s := &session{sl: sl}
+			nCfg, err := s.readSettings(false)
 			if err != nil {
 				t.Fatalf("readSettings: %v", err)
 			}
@@ -209,8 +209,8 @@ func TestReadSettings_SynchronousOff(t *testing.T) {
 				"primary_conninfo": {"host=localhost"},
 				"synchronous":      {val},
 			})
-			cfg := &session{sl: sl}
-			nCfg, err := cfg.readSettings(false)
+			s := &session{sl: sl}
+			nCfg, err := s.readSettings(false)
 			if err != nil {
 				t.Fatalf("readSettings: %v", err)
 			}
@@ -226,8 +226,8 @@ func TestReadSettings_SynchronousInvalid(t *testing.T) {
 		"primary_conninfo": {"host=localhost"},
 		"synchronous":      {"maybe"},
 	})
-	cfg := &session{sl: sl}
-	_, err := cfg.readSettings(false)
+	s := &session{sl: sl}
+	_, err := s.readSettings(false)
 	if err != ErrInvalidSynchronous {
 		t.Errorf("got %v, want %v", err, ErrInvalidSynchronous)
 	}
@@ -237,8 +237,8 @@ func TestReadSettings_SynchronousDefault(t *testing.T) {
 	_, sl := newTestSlot(t, "testslot", map[string][]string{
 		"primary_conninfo": {"host=localhost"},
 	})
-	cfg := &session{sl: sl}
-	nCfg, err := cfg.readSettings(false)
+	s := &session{sl: sl}
+	nCfg, err := s.readSettings(false)
 	if err != nil {
 		t.Fatalf("readSettings: %v", err)
 	}
@@ -251,8 +251,8 @@ func TestReadSettings_IntervalDefaults(t *testing.T) {
 	_, sl := newTestSlot(t, "testslot", map[string][]string{
 		"primary_conninfo": {"host=localhost"},
 	})
-	cfg := &session{sl: sl}
-	nCfg, err := cfg.readSettings(false)
+	s := &session{sl: sl}
+	nCfg, err := s.readSettings(false)
 	if err != nil {
 		t.Fatalf("readSettings: %v", err)
 	}
@@ -271,8 +271,8 @@ func TestReadSettings_IgnoreMissingIdentity(t *testing.T) {
 		"primary_conninfo":        {"host=localhost"},
 		"ignore_missing_identity": {"table1", "table2"},
 	})
-	cfg := &session{sl: sl}
-	nCfg, err := cfg.readSettings(false)
+	s := &session{sl: sl}
+	nCfg, err := s.readSettings(false)
 	if err != nil {
 		t.Fatalf("readSettings: %v", err)
 	}
@@ -290,8 +290,8 @@ func TestReadSettings_Logfile(t *testing.T) {
 		"primary_conninfo": {"host=localhost"},
 		"logfile":          {"file:///tmp/test.log"},
 	})
-	cfg := &session{sl: sl}
-	nCfg, err := cfg.readSettings(false)
+	s := &session{sl: sl}
+	nCfg, err := s.readSettings(false)
 	if err != nil {
 		t.Fatalf("readSettings: %v", err)
 	}
@@ -302,10 +302,10 @@ func TestReadSettings_Logfile(t *testing.T) {
 }
 
 func TestPrepareReload_ErrorPropagated(t *testing.T) {
-	cfg := &session{}
+	s := &session{}
 	testErr := ErrMissingConninfo
 	nCfg := &reloadable{recvP: &cap.Param{}}
-	p := cfg.prepareReload(nCfg, testErr)
+	p := s.prepareReload(nCfg, testErr)
 
 	if p.OnActivation == nil {
 		t.Fatal("OnActivation should be set")

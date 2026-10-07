@@ -57,7 +57,6 @@ type session struct {
 	sl *slot.Slot
 	firstTxnLSN *lsn.LSN		// "nextlsn" of first BEGIN in current file
 								// ONLY used to build the history file name
-	boBegin int64				// file pos of the most recent B record
 	eoCommit int64				// file pos right after the most recent C record
 	currDirFd int
 	histDirFd int
@@ -98,20 +97,20 @@ func (cli *Cli) Run() {
 		log.Panicf("%v", err)
 	}
 
-	cfg := session{
+	s := session{
 		wd: cli.Dir,
 		mgr: mgr,
 		sl: sl,
 		currDirFd: -1,
 	}
 
-	cfg.ensureIncDir()
+	s.ensureIncDir()
 
-	nCfg, err := cfg.readSettings(false)
+	nCfg, err := s.readSettings(false)
 	if err != nil {
 		log.Panicf("%v", err)
 	}
-	err = cfg.applySettings(nCfg, nCfg.recvP)
+	err = s.applySettings(nCfg, nCfg.recvP)
 	if err != nil {
 		log.Panicf("%v", err)
 	}
@@ -120,19 +119,19 @@ func (cli *Cli) Run() {
 	// The metadata update represents the commit of the data to disk. There
 	// is a small time window between metadata update and writing the slot
 	// LSN. If we crashed in this window, the slot LSN is not up to date.
-	startLSN, _ := cfg.sl.GetLSN()
-	llsn_ := cfg.curInit()
+	startLSN, _ := s.sl.GetLSN()
+	llsn_ := s.curInit()
 	if llsn_ > startLSN {		// did we crash?
-		cfg.lg.Noticef("Metadata LSN (%v) > slot LSN (%v) -- did we crash?",
+		s.lg.Noticef("Metadata LSN (%v) > slot LSN (%v) -- did we crash?",
 			llsn_, startLSN)
-		err = cfg.sl.SetLSN(llsn_, true)
+		err = s.sl.SetLSN(llsn_, true)
 		if err != nil {
 			log.Panicf("%v", err)
 		}
 	}
 
 	m := cap.NewReceiver(
-		cap.WithParams(cfg.recvP),
+		cap.WithParams(s.recvP),
 		cap.WithAcceptedPlugins(map[string][]string{
 			"wal2json": []string{
 				`"format-version" '2'`,
@@ -144,7 +143,7 @@ func (cli *Cli) Run() {
 		}),
 		cap.WithStartLSN(pglogrepl.LSN(startLSN)),
 		cap.WithOnConnect(func (_ *cap.Receiver) error {
-			return cfg.truncateToEoc()
+			return s.truncateToEoc()
 		}),
 	)
 
@@ -168,7 +167,7 @@ func (cli *Cli) Run() {
 				m.Shutdown(ErrShutdown)
             case <-reloadCh:
 				m.RequestReload(
-					*cfg.prepareReload(cfg.readSettings(true)),
+					*s.prepareReload(s.readSettings(true)),
 				)
             }
         }
@@ -176,16 +175,16 @@ func (cli *Cli) Run() {
 
 	it, err := m.Produce(nil)
 	if err != nil {
-		cfg.lg.Panicf("Produce: %v", err)
+		s.lg.Panicf("Produce: %v", err)
 	}
 
-	cfg.consume(it, m.AckLSN)
+	s.consume(it, m.AckLSN)
 
 	if err = m.Err(); err != nil {
-		cfg.lg.Errorf("Err: %v", err)
+		s.lg.Errorf("Err: %v", err)
 	}
 
-	cfg.lg.Info("Shutdown complete")	
+	s.lg.Info("Shutdown complete")
 }
 
 // Local Variables:

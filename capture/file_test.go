@@ -35,46 +35,46 @@ func newFileTestCfg(t *testing.T) *session {
 	}
 	t.Cleanup(func() { sl.Close() })
 
-	cfg := &session{
+	s := &session{
 		wd:        dir,
 		mgr:       mgr,
 		sl:        sl,
 		currDirFd: -1,
 	}
-	cfg.ensureIncDir()
+	s.ensureIncDir()
 	t.Cleanup(func() {
-		if cfg.currDirFd >= 0 {
-			unix.Close(cfg.currDirFd)
+		if s.currDirFd >= 0 {
+			unix.Close(s.currDirFd)
 		}
-		if cfg.histDirFd >= 0 {
-			unix.Close(cfg.histDirFd)
+		if s.histDirFd >= 0 {
+			unix.Close(s.histDirFd)
 		}
-		if cfg.meta != nil {
-			cfg.meta.Close()
+		if s.meta != nil {
+			s.meta.Close()
 		}
 	})
 
 	// Set up loggers so functions that use mlg/lg don't panic
-	cfg.lg = log.NewR(log.WithTopic("MAIN"))
-	cfg.mlg = cfg.lg.New(log.WithTopic("WRT"))
+	s.lg = log.NewR(log.WithTopic("MAIN"))
+	s.mlg = s.lg.New(log.WithTopic("WRT"))
 
-	return cfg
+	return s
 }
 
 // ---- writeMeta / readMeta round-trip ----
 
 func TestWriteReadMeta_RoundTrip(t *testing.T) {
-	cfg := newFileTestCfg(t)
+	s := newFileTestCfg(t)
 
 	flsn := mylsn.LSN(0x1234567890ABCDEF)
 	llsn := mylsn.LSN(0xFEDCBA0987654321)
 	epos := int64(4096)
 
-	if err := cfg.writeMeta(epos, &flsn, llsn); err != nil {
+	if err := s.writeMeta(epos, &flsn, llsn); err != nil {
 		t.Fatalf("writeMeta: %v", err)
 	}
 
-	gotEpos, gotFlsn, gotLlsn, err := cfg.readMeta()
+	gotEpos, gotFlsn, gotLlsn, err := s.readMeta()
 	if err != nil {
 		t.Fatalf("readMeta: %v", err)
 	}
@@ -90,16 +90,16 @@ func TestWriteReadMeta_RoundTrip(t *testing.T) {
 }
 
 func TestWriteReadMeta_NilFlsn(t *testing.T) {
-	cfg := newFileTestCfg(t)
+	s := newFileTestCfg(t)
 
 	llsn := mylsn.LSN(0xAAAA)
 	epos := int64(100)
 
-	if err := cfg.writeMeta(epos, nil, llsn); err != nil {
+	if err := s.writeMeta(epos, nil, llsn); err != nil {
 		t.Fatalf("writeMeta: %v", err)
 	}
 
-	gotEpos, gotFlsn, gotLlsn, err := cfg.readMeta()
+	gotEpos, gotFlsn, gotLlsn, err := s.readMeta()
 	if err != nil {
 		t.Fatalf("readMeta: %v", err)
 	}
@@ -115,24 +115,24 @@ func TestWriteReadMeta_NilFlsn(t *testing.T) {
 }
 
 func TestReadMeta_EmptyFile(t *testing.T) {
-	cfg := newFileTestCfg(t)
+	s := newFileTestCfg(t)
 
-	_, _, _, err := cfg.readMeta()
+	_, _, _, err := s.readMeta()
 	if err != ErrMetaGarbage {
 		t.Errorf("readMeta on empty file: got %v, want %v", err, ErrMetaGarbage)
 	}
 }
 
 func TestReadMeta_ShortFile(t *testing.T) {
-	cfg := newFileTestCfg(t)
+	s := newFileTestCfg(t)
 
 	var bts [8]byte
 	binary.BigEndian.PutUint64(bts[:], 42)
-	if _, err := cfg.meta.WriteAt(bts[:], 0); err != nil {
+	if _, err := s.meta.WriteAt(bts[:], 0); err != nil {
 		t.Fatalf("WriteAt: %v", err)
 	}
 
-	_, _, _, err := cfg.readMeta()
+	_, _, _, err := s.readMeta()
 	if err != ErrMetaGarbage {
 		t.Errorf("readMeta on short file: got %v, want %v", err, ErrMetaGarbage)
 	}
@@ -141,30 +141,30 @@ func TestReadMeta_ShortFile(t *testing.T) {
 // ---- newCur ----
 
 func TestNewCur_EmptyFile(t *testing.T) {
-	cfg := newFileTestCfg(t)
-	cfg.writer = bytes.NewBuffer(make([]byte, 0, 65*1024))
+	s := newFileTestCfg(t)
+	s.writer = bytes.NewBuffer(make([]byte, 0, 65*1024))
 
-	llsn, err := cfg.newCur()
+	llsn, err := s.newCur()
 	if err != nil {
 		t.Fatalf("newCur: %v", err)
 	}
 	if llsn != 0 {
 		t.Errorf("llsn: got %v, want 0", llsn)
 	}
-	if cfg.curr == nil {
-		t.Error("cfg.curr should be set")
+	if s.curr == nil {
+		t.Error("s.curr should be set")
 	}
-	if cfg.currLck == nil {
-		t.Error("cfg.currLck should be set")
+	if s.currLck == nil {
+		t.Error("s.currLck should be set")
 	}
-	if cfg.eoCommit != 0 {
-		t.Errorf("eoCommit: got %d, want 0", cfg.eoCommit)
+	if s.eoCommit != 0 {
+		t.Errorf("eoCommit: got %d, want 0", s.eoCommit)
 	}
-	if cfg.firstTxnLSN != nil {
-		t.Errorf("firstTxnLSN: got %v, want nil", cfg.firstTxnLSN)
+	if s.firstTxnLSN != nil {
+		t.Errorf("firstTxnLSN: got %v, want nil", s.firstTxnLSN)
 	}
 
-	eoc, flsn, llsn2, err := cfg.readMeta()
+	eoc, flsn, llsn2, err := s.readMeta()
 	if err != nil {
 		t.Fatalf("readMeta: %v", err)
 	}
@@ -180,10 +180,10 @@ func TestNewCur_EmptyFile(t *testing.T) {
 }
 
 func TestNewCur_ExistingFile(t *testing.T) {
-	cfg := newFileTestCfg(t)
-	cfg.writer = bytes.NewBuffer(make([]byte, 0, 65*1024))
+	s := newFileTestCfg(t)
+	s.writer = bytes.NewBuffer(make([]byte, 0, 65*1024))
 
-	llsn1, err := cfg.newCur()
+	llsn1, err := s.newCur()
 	if err != nil {
 		t.Fatalf("first newCur: %v", err)
 	}
@@ -195,62 +195,62 @@ func TestNewCur_ExistingFile(t *testing.T) {
 	testData := []byte(`{"action":"B","nextlsn":"XXXXXXXX/YYYYYYYY"}
 {"action":"C","nextlsn":"0/100"}
 `)
-	if _, err := cfg.curr.Write(testData); err != nil {
+	if _, err := s.curr.Write(testData); err != nil {
 		t.Fatalf("Write: %v", err)
 	}
 	eof := int64(len(testData))
 	flsn := mylsn.LSN(0x100)
 	llsn := mylsn.LSN(0x100)
-	if err := cfg.writeMeta(eof, &flsn, llsn); err != nil {
+	if err := s.writeMeta(eof, &flsn, llsn); err != nil {
 		t.Fatalf("writeMeta: %v", err)
 	}
-	cfg.curr.Close()
-	cfg.curr = nil
-	if cfg.currLck != nil {
-		cfg.currLck.Close()
-		cfg.currLck = nil
+	s.curr.Close()
+	s.curr = nil
+	if s.currLck != nil {
+		s.currLck.Close()
+		s.currLck = nil
 	}
 
-	llsn2, err := cfg.newCur()
+	llsn2, err := s.newCur()
 	if err != nil {
 		t.Fatalf("second newCur: %v", err)
 	}
 	if llsn2 != llsn {
 		t.Errorf("llsn: got %v, want %v", llsn2, llsn)
 	}
-	if cfg.eoCommit != eof {
-		t.Errorf("eoCommit: got %d, want %d", cfg.eoCommit, eof)
+	if s.eoCommit != eof {
+		t.Errorf("eoCommit: got %d, want %d", s.eoCommit, eof)
 	}
-	if cfg.firstTxnLSN == nil || *cfg.firstTxnLSN != flsn {
-		t.Errorf("firstTxnLSN: got %v, want %v", cfg.firstTxnLSN, flsn)
+	if s.firstTxnLSN == nil || *s.firstTxnLSN != flsn {
+		t.Errorf("firstTxnLSN: got %v, want %v", s.firstTxnLSN, flsn)
 	}
 }
 
 func TestNewCur_Garbage(t *testing.T) {
-	cfg := newFileTestCfg(t)
-	cfg.writer = bytes.NewBuffer(make([]byte, 0, 65*1024))
+	s := newFileTestCfg(t)
+	s.writer = bytes.NewBuffer(make([]byte, 0, 65*1024))
 
-	_, err := cfg.newCur()
+	_, err := s.newCur()
 	if err != nil {
 		t.Fatalf("first newCur: %v", err)
 	}
 
 	// Write some data to the current file so eof > 0
-	if _, err := cfg.curr.Write([]byte("some data")); err != nil {
+	if _, err := s.curr.Write([]byte("some data")); err != nil {
 		t.Fatalf("Write: %v", err)
 	}
 	// Write metadata with eoc pointing far beyond EOF
-	if err := cfg.writeMeta(99999, nil, mylsn.LSN(0)); err != nil {
+	if err := s.writeMeta(99999, nil, mylsn.LSN(0)); err != nil {
 		t.Fatalf("writeMeta: %v", err)
 	}
-	cfg.curr.Close()
-	cfg.curr = nil
-	if cfg.currLck != nil {
-		cfg.currLck.Close()
-		cfg.currLck = nil
+	s.curr.Close()
+	s.curr = nil
+	if s.currLck != nil {
+		s.currLck.Close()
+		s.currLck = nil
 	}
 
-	_, err = cfg.newCur()
+	_, err = s.newCur()
 	if err != ErrCurrGarbage {
 		t.Errorf("newCur with garbage: got %v, want %v", err, ErrCurrGarbage)
 	}
@@ -259,41 +259,41 @@ func TestNewCur_Garbage(t *testing.T) {
 // ---- writeData / flush ----
 
 func TestWriteData(t *testing.T) {
-	cfg := newFileTestCfg(t)
-	cfg.writer = bytes.NewBuffer(make([]byte, 0, 65*1024))
+	s := newFileTestCfg(t)
+	s.writer = bytes.NewBuffer(make([]byte, 0, 65*1024))
 
-	_, err := cfg.newCur()
+	_, err := s.newCur()
 	if err != nil {
 		t.Fatalf("newCur: %v", err)
 	}
 
 	data := []byte(`{"action":"I","xid":1}`)
-	if err := cfg.writeData(data); err != nil {
+	if err := s.writeData(data); err != nil {
 		t.Fatalf("writeData: %v", err)
 	}
-	if cfg.writer.Len() != len(data)+1 {
+	if s.writer.Len() != len(data)+1 {
 		t.Errorf("writer.Len(): got %d, want %d",
-			cfg.writer.Len(), len(data)+1)
+			s.writer.Len(), len(data)+1)
 	}
 
-	n, err := cfg.flush()
+	n, err := s.flush()
 	if err != nil {
 		t.Fatalf("flush: %v", err)
 	}
 	if n != int64(len(data)+1) {
 		t.Errorf("flush n: got %d, want %d", n, int64(len(data)+1))
 	}
-	if cfg.writer.Len() != 0 {
+	if s.writer.Len() != 0 {
 		t.Errorf("writer.Len() after flush: got %d, want 0",
-			cfg.writer.Len())
+			s.writer.Len())
 	}
 }
 
 func TestWriteData_AutoFlush(t *testing.T) {
-	cfg := newFileTestCfg(t)
-	cfg.writer = bytes.NewBuffer(make([]byte, 0, 65*1024))
+	s := newFileTestCfg(t)
+	s.writer = bytes.NewBuffer(make([]byte, 0, 65*1024))
 
-	_, err := cfg.newCur()
+	_, err := s.newCur()
 	if err != nil {
 		t.Fatalf("newCur: %v", err)
 	}
@@ -303,15 +303,15 @@ func TestWriteData_AutoFlush(t *testing.T) {
 	for i := range chunk {
 		chunk[i] = 'x'
 	}
-	if err := cfg.writeData(chunk); err != nil {
+	if err := s.writeData(chunk); err != nil {
 		t.Fatalf("writeData 1: %v", err)
 	}
-	if err := cfg.writeData(chunk); err != nil {
+	if err := s.writeData(chunk); err != nil {
 		t.Fatalf("writeData 2: %v", err)
 	}
 
-	if cfg.writer.Len() == 0 {
-		eof, err := cfg.curr.Seek(0, 2)
+	if s.writer.Len() == 0 {
+		eof, err := s.curr.Seek(0, 2)
 		if err != nil {
 			t.Fatalf("Seek: %v", err)
 		}
@@ -324,10 +324,10 @@ func TestWriteData_AutoFlush(t *testing.T) {
 // ---- truncateToEoc ----
 
 func TestTruncateToEoc(t *testing.T) {
-	cfg := newFileTestCfg(t)
-	cfg.writer = bytes.NewBuffer(make([]byte, 0, 65*1024))
+	s := newFileTestCfg(t)
+	s.writer = bytes.NewBuffer(make([]byte, 0, 65*1024))
 
-	_, err := cfg.newCur()
+	_, err := s.newCur()
 	if err != nil {
 		t.Fatalf("newCur: %v", err)
 	}
@@ -335,54 +335,54 @@ func TestTruncateToEoc(t *testing.T) {
 	committed := []byte(`{"action":"B","nextlsn":"XXXXXXXX/YYYYYYYY"}
 {"action":"C","nextlsn":"0/100"}
 `)
-	if _, err := cfg.curr.Write(committed); err != nil {
+	if _, err := s.curr.Write(committed); err != nil {
 		t.Fatalf("Write committed: %v", err)
 	}
-	cfg.eoCommit = int64(len(committed))
+	s.eoCommit = int64(len(committed))
 
 	uncommitted := []byte(`{"action":"B","nextlsn":"XXXXXXXX/YYYYYYYY"}
 {"action":"I","xid":2}
 `)
-	if _, err := cfg.curr.Write(uncommitted); err != nil {
+	if _, err := s.curr.Write(uncommitted); err != nil {
 		t.Fatalf("Write uncommitted: %v", err)
 	}
 
-	cfg.writer.Write([]byte("buffered"))
+	s.writer.Write([]byte("buffered"))
 
-	if err := cfg.truncateToEoc(); err != nil {
+	if err := s.truncateToEoc(); err != nil {
 		t.Fatalf("truncateToEoc: %v", err)
 	}
 
-	eof, err := cfg.curr.Seek(0, 2)
+	eof, err := s.curr.Seek(0, 2)
 	if err != nil {
 		t.Fatalf("Seek: %v", err)
 	}
-	if eof != cfg.eoCommit {
+	if eof != s.eoCommit {
 		t.Errorf("eof after truncate: got %d, want %d",
-			eof, cfg.eoCommit)
+			eof, s.eoCommit)
 	}
 
-	if cfg.writer.Len() != 0 {
-		t.Errorf("writer.Len(): got %d, want 0", cfg.writer.Len())
+	if s.writer.Len() != 0 {
+		t.Errorf("writer.Len(): got %d, want 0", s.writer.Len())
 	}
 }
 
 func TestTruncateToEoc_NoTruncationNeeded(t *testing.T) {
-	cfg := newFileTestCfg(t)
-	cfg.writer = bytes.NewBuffer(make([]byte, 0, 65*1024))
+	s := newFileTestCfg(t)
+	s.writer = bytes.NewBuffer(make([]byte, 0, 65*1024))
 
-	_, err := cfg.newCur()
+	_, err := s.newCur()
 	if err != nil {
 		t.Fatalf("newCur: %v", err)
 	}
 
-	cfg.eoCommit = 0
+	s.eoCommit = 0
 
-	if err := cfg.truncateToEoc(); err != nil {
+	if err := s.truncateToEoc(); err != nil {
 		t.Fatalf("truncateToEoc: %v", err)
 	}
 
-	eof, err := cfg.curr.Seek(0, 2)
+	eof, err := s.curr.Seek(0, 2)
 	if err != nil {
 		t.Fatalf("Seek: %v", err)
 	}
@@ -394,45 +394,45 @@ func TestTruncateToEoc_NoTruncationNeeded(t *testing.T) {
 // ---- eoc ----
 
 func TestEoc_Commit(t *testing.T) {
-	cfg := newFileTestCfg(t)
-	cfg.writer = bytes.NewBuffer(make([]byte, 0, 65*1024))
-	cfg.maxSize = 16 * 1024 * 1024
+	s := newFileTestCfg(t)
+	s.writer = bytes.NewBuffer(make([]byte, 0, 65*1024))
+	s.maxSize = 16 * 1024 * 1024
 
-	_, err := cfg.newCur()
+	_, err := s.newCur()
 	if err != nil {
 		t.Fatalf("newCur: %v", err)
 	}
 
 	beginJSON := `{"action":"B","nextlsn":"XXXXXXXX/YYYYYYYY"}`
-	if err := cfg.writeData([]byte(beginJSON)); err != nil {
+	if err := s.writeData([]byte(beginJSON)); err != nil {
 		t.Fatalf("writeData B: %v", err)
 	}
 
 	commitLSN := mylsn.LSN(0x200)
 
 	commitJSON := `{"action":"C","nextlsn":"0/200"}`
-	if err := cfg.writeData([]byte(commitJSON)); err != nil {
+	if err := s.writeData([]byte(commitJSON)); err != nil {
 		t.Fatalf("writeData C: %v", err)
 	}
 
-	if err := cfg.eoc(commitLSN, true); err != nil {
+	if err := s.eoc(commitLSN, true); err != nil {
 		t.Fatalf("eoc: %v", err)
 	}
 
-	if cfg.eoCommit == 0 {
+	if s.eoCommit == 0 {
 		t.Error("eoCommit should have advanced from 0")
 	}
 
-	if cfg.firstTxnLSN == nil {
+	if s.firstTxnLSN == nil {
 		t.Error("firstTxnLSN should be set")
 	}
 
-	eoc, flsn, llsn, err := cfg.readMeta()
+	eoc, flsn, llsn, err := s.readMeta()
 	if err != nil {
 		t.Fatalf("readMeta: %v", err)
 	}
-	if eoc != cfg.eoCommit {
-		t.Errorf("meta eoc: got %d, want %d", eoc, cfg.eoCommit)
+	if eoc != s.eoCommit {
+		t.Errorf("meta eoc: got %d, want %d", eoc, s.eoCommit)
 	}
 	if flsn == nil || *flsn != commitLSN {
 		t.Errorf("meta flsn: got %v, want %v", flsn, commitLSN)
@@ -441,18 +441,18 @@ func TestEoc_Commit(t *testing.T) {
 		t.Errorf("meta llsn: got %v, want %v", llsn, commitLSN)
 	}
 
-	slotLSN, _ := cfg.sl.GetLSN()
+	slotLSN, _ := s.sl.GetLSN()
 	if slotLSN != commitLSN {
 		t.Errorf("slot LSN: got %v, want %v", slotLSN, commitLSN)
 	}
 
 	// The B record's placeholder should have been replaced
-	eof, err := cfg.curr.Seek(0, 2)
+	eof, err := s.curr.Seek(0, 2)
 	if err != nil {
 		t.Fatalf("Seek: %v", err)
 	}
 	buf := make([]byte, eof)
-	if _, err := cfg.curr.ReadAt(buf, 0); err != nil {
+	if _, err := s.curr.ReadAt(buf, 0); err != nil {
 		t.Fatalf("ReadAt: %v", err)
 	}
 	if bytes.Contains(buf, []byte("XXXXXXXX/YYYYYYYY")) {
@@ -461,31 +461,31 @@ func TestEoc_Commit(t *testing.T) {
 }
 
 func TestEoc_Rotation(t *testing.T) {
-	cfg := newFileTestCfg(t)
-	cfg.writer = bytes.NewBuffer(make([]byte, 0, 65*1024))
+	s := newFileTestCfg(t)
+	s.writer = bytes.NewBuffer(make([]byte, 0, 65*1024))
 
-	cfg.maxSize = 1
+	s.maxSize = 1
 
-	_, err := cfg.newCur()
+	_, err := s.newCur()
 	if err != nil {
 		t.Fatalf("newCur: %v", err)
 	}
 
 	beginJSON := `{"action":"B","nextlsn":"XXXXXXXX/YYYYYYYY"}`
-	if err := cfg.writeData([]byte(beginJSON)); err != nil {
+	if err := s.writeData([]byte(beginJSON)); err != nil {
 		t.Fatalf("writeData B: %v", err)
 	}
 	commitJSON := `{"action":"C","nextlsn":"0/200"}`
-	if err := cfg.writeData([]byte(commitJSON)); err != nil {
+	if err := s.writeData([]byte(commitJSON)); err != nil {
 		t.Fatalf("writeData C: %v", err)
 	}
 
 	commitLSN := mylsn.LSN(0x200)
-	if err := cfg.eoc(commitLSN, true); err != nil {
+	if err := s.eoc(commitLSN, true); err != nil {
 		t.Fatalf("eoc: %v", err)
 	}
 
-	entries, err := os.ReadDir(filepath.Join(cfg.wd))
+	entries, err := os.ReadDir(filepath.Join(s.wd))
 	if err != nil {
 		t.Fatalf("ReadDir: %v", err)
 	}
@@ -502,10 +502,10 @@ func TestEoc_Rotation(t *testing.T) {
 		t.Error("expected a history file after rotation")
 	}
 
-	if cfg.curr == nil {
-		t.Error("cfg.curr should be set after rotation")
+	if s.curr == nil {
+		t.Error("s.curr should be set after rotation")
 	}
-	if cfg.firstTxnLSN != nil {
+	if s.firstTxnLSN != nil {
 		t.Error("firstTxnLSN should be nil after rotation")
 	}
 }
@@ -528,22 +528,22 @@ func TestEnsureIncDir(t *testing.T) {
 	}
 	t.Cleanup(func() { sl.Close() })
 
-	cfg := &session{
+	s := &session{
 		wd:        dir,
 		mgr:       mgr,
 		sl:        sl,
 		currDirFd: -1,
 	}
-	cfg.ensureIncDir()
+	s.ensureIncDir()
 	t.Cleanup(func() {
-		if cfg.currDirFd >= 0 {
-			unix.Close(cfg.currDirFd)
+		if s.currDirFd >= 0 {
+			unix.Close(s.currDirFd)
 		}
-		if cfg.histDirFd >= 0 {
-			unix.Close(cfg.histDirFd)
+		if s.histDirFd >= 0 {
+			unix.Close(s.histDirFd)
 		}
-		if cfg.meta != nil {
-			cfg.meta.Close()
+		if s.meta != nil {
+			s.meta.Close()
 		}
 	})
 
@@ -564,10 +564,10 @@ func TestEnsureIncDir(t *testing.T) {
 		t.Fatalf("Stat meta: %v", err)
 	}
 
-	if cfg.currDirFd < 0 {
+	if s.currDirFd < 0 {
 		t.Error("currDirFd should be set")
 	}
-	if cfg.histDirFd < 0 {
+	if s.histDirFd < 0 {
 		t.Error("histDirFd should be set")
 	}
 }
@@ -575,42 +575,42 @@ func TestEnsureIncDir(t *testing.T) {
 // ---- curInit ----
 
 func TestCurInit(t *testing.T) {
-	cfg := newFileTestCfg(t)
+	s := newFileTestCfg(t)
 
-	llsn := cfg.curInit()
+	llsn := s.curInit()
 	if llsn != 0 {
 		t.Errorf("curInit llsn: got %v, want 0", llsn)
 	}
-	if cfg.curr == nil {
+	if s.curr == nil {
 		t.Error("curr should be set")
 	}
-	if cfg.writer == nil {
+	if s.writer == nil {
 		t.Error("writer should be set")
 	}
-	if cfg.writer.Cap() != 65*1024 {
+	if s.writer.Cap() != 65*1024 {
 		t.Errorf("writer cap: got %d, want %d",
-			cfg.writer.Cap(), 65*1024)
+			s.writer.Cap(), 65*1024)
 	}
 }
 
 // ---- flock integration ----
 
 func TestNewCur_FlockStored(t *testing.T) {
-	cfg := newFileTestCfg(t)
-	cfg.writer = bytes.NewBuffer(make([]byte, 0, 65*1024))
+	s := newFileTestCfg(t)
+	s.writer = bytes.NewBuffer(make([]byte, 0, 65*1024))
 
-	_, err := cfg.newCur()
+	_, err := s.newCur()
 	if err != nil {
 		t.Fatalf("newCur: %v", err)
 	}
 
-	if cfg.currLck == nil {
+	if s.currLck == nil {
 		t.Fatal("currLck should be set after newCur")
 	}
-	if !cfg.currLck.IsOpen() {
+	if !s.currLck.IsOpen() {
 		t.Error("currLck should be open after newCur")
 	}
-	if cfg.curr == nil {
+	if s.curr == nil {
 		t.Error("curr should be set after newCur")
 	}
 }
@@ -620,9 +620,9 @@ func TestNewCur_FlockStored(t *testing.T) {
 // tryReaderLock opens the current file on a separate flock.Lock (simulating a
 // reader process) and tries to acquire a non-blocking shared range lock at
 // the given position. Returns whether the lock was acquired.
-func tryReaderLock(cfg *session, start, length int64) bool {
+func tryReaderLock(s *session, start, length int64) bool {
 	lck := flock.New(
-		flock.WithPathAt(cfg.currDirFd),
+		flock.WithPathAt(s.currDirFd),
 		flock.WithPath(defaults.CurFile),
 	)
 	if err := lck.Open(); err != nil {
@@ -635,22 +635,22 @@ func tryReaderLock(cfg *session, start, length int64) bool {
 // TestRangeLock_NewCur_LocksAtEoc verifies that newCur acquires an exclusive
 // range lock at the eoCommit position on the current file.
 func TestRangeLock_NewCur_LocksAtEoc(t *testing.T) {
-	cfg := newFileTestCfg(t)
-	cfg.writer = bytes.NewBuffer(make([]byte, 0, 65*1024))
+	s := newFileTestCfg(t)
+	s.writer = bytes.NewBuffer(make([]byte, 0, 65*1024))
 
-	_, err := cfg.newCur()
+	_, err := s.newCur()
 	if err != nil {
 		t.Fatalf("newCur: %v", err)
 	}
 
 	// A reader from a separate fd should NOT be able to acquire a shared
 	// lock at position 0 (where eoc is for a new file).
-	if tryReaderLock(cfg, 0, 1) {
+	if tryReaderLock(s, 0, 1) {
 		t.Error("shared lock at eoc=0 should be blocked by exclusive lock")
 	}
 
 	// A reader should be able to lock beyond eoc (position 1+).
-	if !tryReaderLock(cfg, 1, 1) {
+	if !tryReaderLock(s, 1, 1) {
 		t.Error("shared lock beyond eoc should succeed")
 	}
 }
@@ -658,31 +658,31 @@ func TestRangeLock_NewCur_LocksAtEoc(t *testing.T) {
 // TestRangeLock_Eoc_AdvancesLock verifies that eoc acquires a new lock at
 // the new eoCommit position and releases the old range.
 func TestRangeLock_Eoc_AdvancesLock(t *testing.T) {
-	cfg := newFileTestCfg(t)
-	cfg.writer = bytes.NewBuffer(make([]byte, 0, 65*1024))
-	cfg.maxSize = 16 * 1024 * 1024
+	s := newFileTestCfg(t)
+	s.writer = bytes.NewBuffer(make([]byte, 0, 65*1024))
+	s.maxSize = 16 * 1024 * 1024
 
-	_, err := cfg.newCur()
+	_, err := s.newCur()
 	if err != nil {
 		t.Fatalf("newCur: %v", err)
 	}
 
 	// Write a BEGIN + COMMIT, call eoc
 	beginJSON := `{"action":"B","nextlsn":"XXXXXXXX/YYYYYYYY"}`
-	if err := cfg.writeData([]byte(beginJSON)); err != nil {
+	if err := s.writeData([]byte(beginJSON)); err != nil {
 		t.Fatalf("writeData B: %v", err)
 	}
 	commitJSON := `{"action":"C","nextlsn":"0/200"}`
-	if err := cfg.writeData([]byte(commitJSON)); err != nil {
+	if err := s.writeData([]byte(commitJSON)); err != nil {
 		t.Fatalf("writeData C: %v", err)
 	}
 	commitLSN := mylsn.LSN(0x200)
-	if err := cfg.eoc(commitLSN, true); err != nil {
+	if err := s.eoc(commitLSN, true); err != nil {
 		t.Fatalf("eoc: %v", err)
 	}
 
 	oldEoc := int64(0) // original eoc
-	newEoc := cfg.eoCommit
+	newEoc := s.eoCommit
 
 	if newEoc == oldEoc {
 		t.Fatal("eoc should have advanced")
@@ -690,17 +690,17 @@ func TestRangeLock_Eoc_AdvancesLock(t *testing.T) {
 
 	// Open a reader fd
 	// The old position (0) should now be unlocked (released by UnlockRange)
-	if !tryReaderLock(cfg, oldEoc, 1) {
+	if !tryReaderLock(s, oldEoc, 1) {
 		t.Error("shared lock at old eoc should succeed after eoc advances")
 	}
 
 	// The new position should be locked exclusively
-	if tryReaderLock(cfg, newEoc, 1) {
+	if tryReaderLock(s, newEoc, 1) {
 		t.Error("shared lock at new eoc should be blocked by exclusive lock")
 	}
 
 	// Beyond new eoc should be unlocked
-	if !tryReaderLock(cfg, newEoc+1, 1) {
+	if !tryReaderLock(s, newEoc+1, 1) {
 		t.Error("shared lock beyond new eoc should succeed")
 	}
 }
@@ -708,60 +708,60 @@ func TestRangeLock_Eoc_AdvancesLock(t *testing.T) {
 // TestRangeLock_Eoc_MultipleCommits verifies that after multiple eoc calls,
 // only the latest eoCommit position is locked.
 func TestRangeLock_Eoc_MultipleCommits(t *testing.T) {
-	cfg := newFileTestCfg(t)
-	cfg.writer = bytes.NewBuffer(make([]byte, 0, 65*1024))
-	cfg.maxSize = 16 * 1024 * 1024
+	s := newFileTestCfg(t)
+	s.writer = bytes.NewBuffer(make([]byte, 0, 65*1024))
+	s.maxSize = 16 * 1024 * 1024
 
-	_, err := cfg.newCur()
+	_, err := s.newCur()
 	if err != nil {
 		t.Fatalf("newCur: %v", err)
 	}
 
 	// First commit
-	if err := cfg.writeData([]byte(`{"action":"B","nextlsn":"XXXXXXXX/YYYYYYYY"}`)); err != nil {
+	if err := s.writeData([]byte(`{"action":"B","nextlsn":"XXXXXXXX/YYYYYYYY"}`)); err != nil {
 		t.Fatalf("writeData B1: %v", err)
 	}
-	if err := cfg.writeData([]byte(`{"action":"C","nextlsn":"0/100"}`)); err != nil {
+	if err := s.writeData([]byte(`{"action":"C","nextlsn":"0/100"}`)); err != nil {
 		t.Fatalf("writeData C1: %v", err)
 	}
-	if err := cfg.eoc(mylsn.LSN(0x100), true); err != nil {
+	if err := s.eoc(mylsn.LSN(0x100), true); err != nil {
 		t.Fatalf("eoc 1: %v", err)
 	}
-	eoc1 := cfg.eoCommit
+	eoc1 := s.eoCommit
 
 	// Second commit
-	if err := cfg.writeData([]byte(`{"action":"B","nextlsn":"XXXXXXXX/YYYYYYYY"}`)); err != nil {
+	if err := s.writeData([]byte(`{"action":"B","nextlsn":"XXXXXXXX/YYYYYYYY"}`)); err != nil {
 		t.Fatalf("writeData B2: %v", err)
 	}
-	if err := cfg.writeData([]byte(`{"action":"C","nextlsn":"0/200"}`)); err != nil {
+	if err := s.writeData([]byte(`{"action":"C","nextlsn":"0/200"}`)); err != nil {
 		t.Fatalf("writeData C2: %v", err)
 	}
-	if err := cfg.eoc(mylsn.LSN(0x200), true); err != nil {
+	if err := s.eoc(mylsn.LSN(0x200), true); err != nil {
 		t.Fatalf("eoc 2: %v", err)
 	}
-	eoc2 := cfg.eoCommit
+	eoc2 := s.eoCommit
 
 	// Third commit
-	if err := cfg.writeData([]byte(`{"action":"B","nextlsn":"XXXXXXXX/YYYYYYYY"}`)); err != nil {
+	if err := s.writeData([]byte(`{"action":"B","nextlsn":"XXXXXXXX/YYYYYYYY"}`)); err != nil {
 		t.Fatalf("writeData B3: %v", err)
 	}
-	if err := cfg.writeData([]byte(`{"action":"C","nextlsn":"0/300"}`)); err != nil {
+	if err := s.writeData([]byte(`{"action":"C","nextlsn":"0/300"}`)); err != nil {
 		t.Fatalf("writeData C3: %v", err)
 	}
-	if err := cfg.eoc(mylsn.LSN(0x300), true); err != nil {
+	if err := s.eoc(mylsn.LSN(0x300), true); err != nil {
 		t.Fatalf("eoc 3: %v", err)
 	}
-	eoc3 := cfg.eoCommit
+	eoc3 := s.eoCommit
 
 	// All previous eoc positions should be unlocked
 	for _, pos := range []int64{0, eoc1, eoc2} {
-		if !tryReaderLock(cfg, pos, 1) {
+		if !tryReaderLock(s, pos, 1) {
 			t.Errorf("shared lock at pos %d should succeed", pos)
 		}
 	}
 
 	// Only the latest eoc should be locked
-	if tryReaderLock(cfg, eoc3, 1) {
+	if tryReaderLock(s, eoc3, 1) {
 		t.Error("shared lock at latest eoc should be blocked")
 	}
 }
@@ -769,34 +769,34 @@ func TestRangeLock_Eoc_MultipleCommits(t *testing.T) {
 // TestRangeLock_Rotate_ReleasesLock verifies that after rotation, the old
 // file's locks are released (fd closed) and the new file is locked at 0.
 func TestRangeLock_Rotate_ReleasesLock(t *testing.T) {
-	cfg := newFileTestCfg(t)
-	cfg.writer = bytes.NewBuffer(make([]byte, 0, 65*1024))
-	cfg.maxSize = 1 // trigger rotation
+	s := newFileTestCfg(t)
+	s.writer = bytes.NewBuffer(make([]byte, 0, 65*1024))
+	s.maxSize = 1 // trigger rotation
 
-	_, err := cfg.newCur()
+	_, err := s.newCur()
 	if err != nil {
 		t.Fatalf("newCur: %v", err)
 	}
 
-	if err := cfg.writeData([]byte(`{"action":"B","nextlsn":"XXXXXXXX/YYYYYYYY"}`)); err != nil {
+	if err := s.writeData([]byte(`{"action":"B","nextlsn":"XXXXXXXX/YYYYYYYY"}`)); err != nil {
 		t.Fatalf("writeData B: %v", err)
 	}
-	if err := cfg.writeData([]byte(`{"action":"C","nextlsn":"0/200"}`)); err != nil {
+	if err := s.writeData([]byte(`{"action":"C","nextlsn":"0/200"}`)); err != nil {
 		t.Fatalf("writeData C: %v", err)
 	}
 	commitLSN := mylsn.LSN(0x200)
-	if err := cfg.eoc(commitLSN, true); err != nil {
+	if err := s.eoc(commitLSN, true); err != nil {
 		t.Fatalf("eoc: %v", err)
 	}
 
 	// After rotation, a new current file should exist and be locked at 0
 	// Position 0 should be locked (new file, newCur locks at eoc=0)
-	if tryReaderLock(cfg, 0, 1) {
+	if tryReaderLock(s, 0, 1) {
 		t.Error("shared lock at position 0 should be blocked after rotation")
 	}
 
 	// Position 1 should be unlocked
-	if !tryReaderLock(cfg, 1, 1) {
+	if !tryReaderLock(s, 1, 1) {
 		t.Error("shared lock at position 1 should succeed after rotation")
 	}
 }
@@ -804,46 +804,46 @@ func TestRangeLock_Rotate_ReleasesLock(t *testing.T) {
 // TestRangeLock_TruncateKeepsLock verifies that truncateToEoc doesn't
 // change the lock position.
 func TestRangeLock_TruncateKeepsLock(t *testing.T) {
-	cfg := newFileTestCfg(t)
-	cfg.writer = bytes.NewBuffer(make([]byte, 0, 65*1024))
-	cfg.maxSize = 16 * 1024 * 1024
+	s := newFileTestCfg(t)
+	s.writer = bytes.NewBuffer(make([]byte, 0, 65*1024))
+	s.maxSize = 16 * 1024 * 1024
 
-	_, err := cfg.newCur()
+	_, err := s.newCur()
 	if err != nil {
 		t.Fatalf("newCur: %v", err)
 	}
 
 	// Commit one transaction
-	if err := cfg.writeData([]byte(`{"action":"B","nextlsn":"XXXXXXXX/YYYYYYYY"}`)); err != nil {
+	if err := s.writeData([]byte(`{"action":"B","nextlsn":"XXXXXXXX/YYYYYYYY"}`)); err != nil {
 		t.Fatalf("writeData B: %v", err)
 	}
-	if err := cfg.writeData([]byte(`{"action":"C","nextlsn":"0/100"}`)); err != nil {
+	if err := s.writeData([]byte(`{"action":"C","nextlsn":"0/100"}`)); err != nil {
 		t.Fatalf("writeData C: %v", err)
 	}
-	if err := cfg.eoc(mylsn.LSN(0x100), true); err != nil {
+	if err := s.eoc(mylsn.LSN(0x100), true); err != nil {
 		t.Fatalf("eoc: %v", err)
 	}
-	eocPos := cfg.eoCommit
+	eocPos := s.eoCommit
 
 	// Write uncommitted data beyond eoCommit
-	if _, err := cfg.curr.Write(
+	if _, err := s.curr.Write(
 		[]byte(`{"action":"B","nextlsn":"XXXXXXXX/YYYYYYYY"}`),
 	); err != nil {
 		t.Fatalf("Write uncommitted: %v", err)
 	}
-	cfg.writer.Write([]byte("buffered"))
+	s.writer.Write([]byte("buffered"))
 
 	// Truncate
-	if err := cfg.truncateToEoc(); err != nil {
+	if err := s.truncateToEoc(); err != nil {
 		t.Fatalf("truncateToEoc: %v", err)
 	}
 
 	// The lock should still be at eocPos
-	if tryReaderLock(cfg, eocPos, 1) {
+	if tryReaderLock(s, eocPos, 1) {
 		t.Error("shared lock at eoc should still be blocked after truncate")
 	}
 	// Beyond eoc should be unlocked (truncated away)
-	if !tryReaderLock(cfg, eocPos+1, 1) {
+	if !tryReaderLock(s, eocPos+1, 1) {
 		t.Error("shared lock beyond eoc should succeed after truncate")
 	}
 }

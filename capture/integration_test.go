@@ -130,45 +130,45 @@ func newTestCfg(t *testing.T, connInfo, sn string) *session {
 		t.Fatalf("SaveConfig: %v", err)
 	}
 
-	cfg := &session{
+	s := &session{
 		wd:        dir,
 		mgr:       mgr,
 		sl:        sl,
 		currDirFd: -1,
 	}
-	cfg.ensureIncDir()
+	s.ensureIncDir()
 	t.Cleanup(func() {
-		if cfg.currDirFd >= 0 {
-			cfg.currDirFd = -1
+		if s.currDirFd >= 0 {
+			s.currDirFd = -1
 		}
 	})
 
 	// Set up loggers (applySettings needs m.lg to be non-nil)
-	cfg.lg = log.NewR(log.WithTopic("MAIN"))
-	cfg.mlg = cfg.lg.New(log.WithTopic("WRT"))
+	s.lg = log.NewR(log.WithTopic("MAIN"))
+	s.mlg = s.lg.New(log.WithTopic("WRT"))
 	// Initialize recvP so applySettings can compare against it
-	cfg.recvP = &cap.Param{}
+	s.recvP = &cap.Param{}
 
-	nCfg, err := cfg.readSettings(false)
+	nCfg, err := s.readSettings(false)
 	if err != nil {
 		t.Fatalf("readSettings: %v", err)
 	}
 	nCfg.recvP.ErrorRetryInterval = 500 * time.Millisecond
 	nCfg.recvP.FeedbackInterval = 1 * time.Second
 
-	if err := cfg.applySettings(nCfg, nCfg.recvP); err != nil {
+	if err := s.applySettings(nCfg, nCfg.recvP); err != nil {
 		t.Fatalf("applySettings: %v", err)
 	}
 
 	// Initialize the capture file
-	cfg.curInit()
+	s.curInit()
 
-	return cfg
+	return s
 }
 
-func newReceiver(cfg *session) *cap.Receiver {
+func newReceiver(s *session) *cap.Receiver {
 	return cap.NewReceiver(
-		cap.WithParams(cfg.recvP),
+		cap.WithParams(s.recvP),
 		cap.WithAcceptedPlugins(map[string][]string{
 			testPlugin: {},
 		}),
@@ -176,14 +176,14 @@ func newReceiver(cfg *session) *cap.Receiver {
 }
 
 // readCurrentFile reads all data from the current file up to eoCommit.
-func readCurrentFile(t *testing.T, cfg *session) []byte {
+func readCurrentFile(t *testing.T, s *session) []byte {
 	t.Helper()
-	n := cfg.eoCommit
+	n := s.eoCommit
 	if n == 0 {
 		return nil
 	}
 	buf := make([]byte, n)
-	if _, err := cfg.curr.ReadAt(buf, 0); err != nil {
+	if _, err := s.curr.ReadAt(buf, 0); err != nil {
 		t.Fatalf("ReadAt: %v", err)
 	}
 	return buf
@@ -198,8 +198,8 @@ func TestIntegrationCaptureSingleTransaction(t *testing.T) {
 	defer cleanup()
 	setupTable(t, connInfo)
 
-	cfg := newTestCfg(t, connInfo, sn)
-	r := newReceiver(cfg)
+	s := newTestCfg(t, connInfo, sn)
+	r := newReceiver(s)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -245,14 +245,14 @@ func TestIntegrationCaptureTruncateOnReconnect(t *testing.T) {
 	defer cleanup()
 	setupTable(t, connInfo)
 
-	cfg := newTestCfg(t, connInfo, sn)
+	s := newTestCfg(t, connInfo, sn)
 	r := cap.NewReceiver(
-		cap.WithParams(cfg.recvP),
+		cap.WithParams(s.recvP),
 		cap.WithAcceptedPlugins(map[string][]string{
 			testPlugin: {},
 		}),
 		cap.WithOnConnect(func(_ *cap.Receiver) error {
-			return cfg.truncateToEoc()
+			return s.truncateToEoc()
 		}),
 	)
 
@@ -288,11 +288,11 @@ func TestIntegrationCaptureTruncateOnReconnect(t *testing.T) {
 	}
 
 	// Verify truncateToEoc doesn't corrupt the file
-	eofBefore, _ := cfg.curr.Seek(0, 2)
-	if err := cfg.truncateToEoc(); err != nil {
+	eofBefore, _ := s.curr.Seek(0, 2)
+	if err := s.truncateToEoc(); err != nil {
 		t.Fatalf("truncateToEoc: %v", err)
 	}
-	eofAfter, _ := cfg.curr.Seek(0, 2)
+	eofAfter, _ := s.curr.Seek(0, 2)
 	if eofAfter > eofBefore {
 		t.Errorf("file grew after truncate: %d -> %d", eofBefore, eofAfter)
 	}
@@ -305,10 +305,10 @@ func TestIntegrationCaptureRotation(t *testing.T) {
 	defer cleanup()
 	setupTable(t, connInfo)
 
-	cfg := newTestCfg(t, connInfo, sn)
-	cfg.maxSize = 1 // trigger rotation on first commit
+	s := newTestCfg(t, connInfo, sn)
+	s.maxSize = 1 // trigger rotation on first commit
 
-	r := newReceiver(cfg)
+	r := newReceiver(s)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -335,13 +335,13 @@ func TestIntegrationCaptureRotation(t *testing.T) {
 			xldCount++
 			t.Logf("XLD #%d: %s", xldCount, string(dat.WALData))
 			// Write data through the capture pipeline to trigger rotation
-			if err := cfg.writeData(dat.WALData); err != nil {
+			if err := s.writeData(dat.WALData); err != nil {
 				t.Fatalf("writeData: %v", err)
 			}
 			// Call eoc on every COMMIT-like message.
 			// test_decoding sends "COMMIT <xid>" as a separate XLD.
 			if strings.HasPrefix(string(dat.WALData), "COMMIT") {
-				if err := cfg.eoc(
+				if err := s.eoc(
 					mylsn.LSN(dat.ServerWALEnd), false,
 				); err != nil {
 					t.Fatalf("eoc: %v", err)
@@ -359,7 +359,7 @@ func TestIntegrationCaptureRotation(t *testing.T) {
 	t.Logf("captured %d XLogData messages", xldCount)
 
 	// After rotation, check for history files in the parent directory
-	entries, err := os.ReadDir(filepath.Join(cfg.wd))
+	entries, err := os.ReadDir(filepath.Join(s.wd))
 	if err != nil {
 		t.Fatalf("ReadDir: %v", err)
 	}
@@ -377,7 +377,7 @@ func TestIntegrationCaptureRotation(t *testing.T) {
 	}
 
 	// The current file should still exist
-	curPath := filepath.Join(cfg.wd, defaults.IncDir, defaults.CurFile)
+	curPath := filepath.Join(s.wd, defaults.IncDir, defaults.CurFile)
 	if _, err := os.Stat(curPath); err != nil {
 		t.Errorf("current file should exist: %v", err)
 	}
