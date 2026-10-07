@@ -101,9 +101,9 @@ func setupTable(t *testing.T, connInfo string) {
 		 DELETE FROM oypg_test;`)
 }
 
-// newTestCfg creates a Cfg with a slot manager in a temp dir, configures
+// newTestCfg creates a session with a slot manager in a temp dir, configures
 // primary_conninfo, and initializes the capture file structure.
-func newTestCfg(t *testing.T, connInfo, sn string) *Cfg {
+func newTestCfg(t *testing.T, connInfo, sn string) *session {
 	t.Helper()
 	dir := t.TempDir()
 
@@ -130,7 +130,7 @@ func newTestCfg(t *testing.T, connInfo, sn string) *Cfg {
 		t.Fatalf("SaveConfig: %v", err)
 	}
 
-	cfg := &Cfg{
+	cfg := &session{
 		wd:        dir,
 		mgr:       mgr,
 		sl:        sl,
@@ -166,7 +166,7 @@ func newTestCfg(t *testing.T, connInfo, sn string) *Cfg {
 	return cfg
 }
 
-func newReceiver(cfg *Cfg) *cap.Receiver {
+func newReceiver(cfg *session) *cap.Receiver {
 	return cap.NewReceiver(
 		cap.WithParams(cfg.recvP),
 		cap.WithAcceptedPlugins(map[string][]string{
@@ -176,7 +176,7 @@ func newReceiver(cfg *Cfg) *cap.Receiver {
 }
 
 // readCurrentFile reads all data from the current file up to eoCommit.
-func readCurrentFile(t *testing.T, cfg *Cfg) []byte {
+func readCurrentFile(t *testing.T, cfg *session) []byte {
 	t.Helper()
 	n := cfg.eoCommit
 	if n == 0 {

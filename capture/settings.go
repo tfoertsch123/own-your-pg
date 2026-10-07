@@ -1,7 +1,6 @@
 package capture
 
 import (
-	"errors"
 	"strconv"
 	"strings"
 	"github.com/alecthomas/units"
@@ -11,17 +10,13 @@ import (
 	"github.com/tfoertsch123/pgconnstr"
 )
 
-var ErrMissingConninfo error = errors.New("primary_conninfo not set")
-var ErrInvalidConninfo error = errors.New("cannot parse primary_conninfo")
-var ErrInvalidLimit error = errors.New("size_limit is invalid")
-var ErrInvalidSynchronous error = errors.New("synchronous is invalid")
 
-// readSettings reads the slot and returns a new *Reloadable parameter package
+// readSettings reads the slot and returns a new *reloadable parameter package
 // or an error.
 // readSettings must not access anything other than m.sl, not even a logger.
 // It can be called by a separate go routine.
-func (m *Cfg) readSettings(update bool) (*Reloadable, error) {
-	nCfg := &Reloadable{recvP: &cap.Param{}}
+func (m *session) readSettings(update bool) (*reloadable, error) {
+	nCfg := &reloadable{recvP: &cap.Param{}}
 	if x, err := m.sl.GetConfig("logfile", update); err != nil {
 		return nCfg, err
 	} else if len(x) >= 1 {
@@ -87,7 +82,7 @@ func (m *Cfg) readSettings(update bool) (*Reloadable, error) {
 
 // called by the reload signal handler in a separate go routine.
 // sets the OnActivation handler
-func (m *Cfg) prepareReload(nCfg *Reloadable, err error) *cap.Param {
+func (m *session) prepareReload(nCfg *reloadable, err error) *cap.Param {
 	nCfg.recvP.OnActivation = func(p *cap.Param) error {
 		if err != nil {
 			return err
@@ -101,7 +96,7 @@ func (m *Cfg) prepareReload(nCfg *Reloadable, err error) *cap.Param {
 // can access all the fields in m. The passed in recvP is not the same as
 // nCfg.revcP. Logically it is but it has been copied somewhere along the
 // way. So, changes must be made there.
-func (m *Cfg) applySettings(nCfg *Reloadable, recvP *cap.Param) error {
+func (m *session) applySettings(nCfg *reloadable, recvP *cap.Param) error {
 	ret := cap.ErrNoChange
 	if m.logURL != nCfg.logURL ||
 	   m.recvP.ConnInfo != recvP.ConnInfo ||
@@ -163,7 +158,7 @@ func (m *Cfg) applySettings(nCfg *Reloadable, recvP *cap.Param) error {
 		ret = nil
 		nCfg.recvP = recvP
 	}
-	m.Reloadable = *nCfg
+	m.reloadable = *nCfg
 
 	m.lg.Infof("Reload Parameters:\n%v", nCfg)
 	return ret

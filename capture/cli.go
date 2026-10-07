@@ -27,14 +27,14 @@ type Cli struct {
 	Slot string `short:"S" help:"Slot name." default:"${basename}"`
 }
 
-type Reloadable struct {
+type reloadable struct {
 	logURL string
 	recvP *cap.Param
 	maxSize int64
 	ignMissId []string
 }
 
-func (r *Reloadable) String() string {
+func (r *reloadable) String() string {
 	return fmt.Sprintf(
 		"logfile: %v\n" +
 			"primary_conninfo: %v\n" +
@@ -51,7 +51,7 @@ func (r *Reloadable) String() string {
 	)
 }
 
-type Cfg struct {
+type session struct {
 	wd string					// only for error messages
 	mgr *slot.Mgr
 	sl *slot.Slot
@@ -69,10 +69,19 @@ type Cfg struct {
 	lg *log.Logger
 	mlg *log.Logger				// to be used in the writing part
 
-	Reloadable
+	reloadable
 }
 
-var ErrShutdown = errors.New("Shutdown signal")
+var (
+	ErrShutdown          = errors.New("Shutdown signal")
+	ErrMissingConninfo   = errors.New("primary_conninfo not set")
+	ErrInvalidConninfo   = errors.New("cannot parse primary_conninfo")
+	ErrInvalidLimit      = errors.New("size_limit is invalid")
+	ErrInvalidSynchronous = errors.New("synchronous is invalid")
+	ErrCurrGarbage       = errors.New("current file is garbage")
+	ErrMetaGarbage       = errors.New("metadata file is garbage")
+)
+
 func (cli *Cli) Run() {
 	sd := filepath.Join(cli.Dir, defaults.SlotDir)
 	mgr, err := slot.NewMgr(sd, slot.WithMgrCheck())
@@ -89,7 +98,7 @@ func (cli *Cli) Run() {
 		log.Panicf("%v", err)
 	}
 
-	cfg := Cfg{
+	cfg := session{
 		wd: cli.Dir,
 		mgr: mgr,
 		sl: sl,

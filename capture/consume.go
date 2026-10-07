@@ -119,7 +119,7 @@ func parseAndAddLsn(data []byte, lsn mylsn.LSN) (*parsed, error) {
 	return res, nil
 }
 
-func (cfg *Cfg) consume(
+func (cfg *session) consume(
 	it iter.Seq[cap.MsgItem],
 	ack func(pglogrepl.LSN, ...pglogrepl.LSN),
 ) {

@@ -17,9 +17,9 @@ import (
 	mylsn "github.com/tfoertsch123/own-your-pg/lsn"
 )
 
-// newFileTestCfg creates a Cfg with a slot, mgr, and the incoming directory
+// newFileTestCfg creates a session with a slot, mgr, and the incoming directory
 // structure set up in a temp dir, ready for file I/O tests.
-func newFileTestCfg(t *testing.T) *Cfg {
+func newFileTestCfg(t *testing.T) *session {
 	t.Helper()
 	dir := t.TempDir()
 
@@ -35,7 +35,7 @@ func newFileTestCfg(t *testing.T) *Cfg {
 	}
 	t.Cleanup(func() { sl.Close() })
 
-	cfg := &Cfg{
+	cfg := &session{
 		wd:        dir,
 		mgr:       mgr,
 		sl:        sl,
@@ -528,7 +528,7 @@ func TestEnsureIncDir(t *testing.T) {
 	}
 	t.Cleanup(func() { sl.Close() })
 
-	cfg := &Cfg{
+	cfg := &session{
 		wd:        dir,
 		mgr:       mgr,
 		sl:        sl,
@@ -620,7 +620,7 @@ func TestNewCur_FlockStored(t *testing.T) {
 // tryReaderLock opens the current file on a separate flock.Lock (simulating a
 // reader process) and tries to acquire a non-blocking shared range lock at
 // the given position. Returns whether the lock was acquired.
-func tryReaderLock(cfg *Cfg, start, length int64) bool {
+func tryReaderLock(cfg *session, start, length int64) bool {
 	lck := flock.New(
 		flock.WithPathAt(cfg.currDirFd),
 		flock.WithPath(defaults.CurFile),
@@ -827,7 +827,7 @@ func TestRangeLock_TruncateKeepsLock(t *testing.T) {
 
 	// Write uncommitted data beyond eoCommit
 	if _, err := cfg.curr.Write(
-		[]byte(`{"action":"B","nextlsn":"XXXXXXXX/YYYYYYYY"}`)
+		[]byte(`{"action":"B","nextlsn":"XXXXXXXX/YYYYYYYY"}`),
 	); err != nil {
 		t.Fatalf("Write uncommitted: %v", err)
 	}

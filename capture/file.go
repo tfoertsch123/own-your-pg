@@ -31,7 +31,7 @@ import (
 
 // make sure the incoming directory exists
 // We can't use cfg.mlg here. It might not be initialized
-func (cfg *Cfg) ensureIncDir() {
+func (cfg *session) ensureIncDir() {
 	path := filepath.Join("..", defaults.IncDir)
 	err := unix.Mkdirat(cfg.mgr.DirFd(), path, 0777)
 	if err != nil && !errors.Is(err, unix.EEXIST) {
@@ -73,7 +73,7 @@ func (cfg *Cfg) ensureIncDir() {
 //   This is used as our own commit position. Upon startup, this position
 //   takes precedence over the position in the slot if it is ahead of
 //   the slot LSN.
-func (cfg *Cfg) writeMeta(epos int64, flsn *mylsn.LSN, llsn mylsn.LSN) error {
+func (cfg *session) writeMeta(epos int64, flsn *mylsn.LSN, llsn mylsn.LSN) error {
 	var bts [24]byte
 	binary.BigEndian.PutUint64(bts[:8], uint64(epos))
 	if flsn == nil {
@@ -104,7 +104,7 @@ func (cfg *Cfg) writeMeta(epos int64, flsn *mylsn.LSN, llsn mylsn.LSN) error {
 	return cfg.meta.Sync()
 }
 
-func (cfg *Cfg) readMeta() (int64, *mylsn.LSN, mylsn.LSN, error) {
+func (cfg *session) readMeta() (int64, *mylsn.LSN, mylsn.LSN, error) {
 	var bts [24]byte
 	_, err := cfg.meta.ReadAt(bts[:], 0)
 	if err != nil {
@@ -130,7 +130,7 @@ func (cfg *Cfg) readMeta() (int64, *mylsn.LSN, mylsn.LSN, error) {
 // after that is invalid so far and will be retransmitted anyway when we
 // reconnect to the DB. So, we need to truncate the file to the latest
 // commit position and we might need to discard the write buffer content.
-func (cfg *Cfg) truncateToEoc() error {
+func (cfg *session) truncateToEoc() error {
 	eof, err := cfg.curr.Seek(0, io.SeekEnd)
 	if err != nil {
 		return err
@@ -157,11 +157,9 @@ func (cfg *Cfg) truncateToEoc() error {
 	return nil
 }
 
-var ErrCurrGarbage = errors.New("current file is garbage")
-var ErrMetaGarbage = errors.New("metadata file is garbage")
 
 // create a new and empty incoming/current file
-func (cfg *Cfg) newCur() (mylsn.LSN, error) {
+func (cfg *session) newCur() (mylsn.LSN, error) {
 	lck := flock.New(
 		flock.WithCreate(0666),
 		flock.WithRdWr(),
@@ -238,7 +236,7 @@ func (cfg *Cfg) newCur() (mylsn.LSN, error) {
 }
 
 // to be called once during initialization
-func (cfg *Cfg) curInit() mylsn.LSN {
+func (cfg *session) curInit() mylsn.LSN {
 	// create the first current file
 	llsn, err := cfg.newCur()
 	if err != nil {
@@ -254,11 +252,11 @@ func (cfg *Cfg) curInit() mylsn.LSN {
 	return llsn
 }
 
-func (cfg *Cfg) flush() (int64, error) {
+func (cfg *session) flush() (int64, error) {
 	return cfg.writer.WriteTo(cfg.curr)
 }
 
-func (cfg *Cfg) writeData(data []byte) error {
+func (cfg *session) writeData(data []byte) error {
 	cfg.writer.Write(data)
 	cfg.writer.WriteByte('\n')
 
@@ -276,7 +274,7 @@ func (cfg *Cfg) writeData(data []byte) error {
 // a non-transactional message.
 // Calling this function means functionally committing the previous
 // transaction.
-func (cfg *Cfg) eoc(lsn mylsn.LSN, writeBLSN bool) error {
+func (cfg *session) eoc(lsn mylsn.LSN, writeBLSN bool) error {
 	if cfg.firstTxnLSN == nil {
 		cfg.firstTxnLSN = &lsn
 	}
@@ -349,7 +347,7 @@ func (cfg *Cfg) eoc(lsn mylsn.LSN, writeBLSN bool) error {
 // at COMMIT. No check is performed if there is data in the buffer. Even
 // if there was something in the buffer, it would simply be written to the
 // new file.
-func (cfg *Cfg) rotateFile(endlsn mylsn.LSN) error {
+func (cfg *session) rotateFile(endlsn mylsn.LSN) error {
 	cfg.curr.Close()
 	cfg.curr = nil
 	cfg.currLck = nil
