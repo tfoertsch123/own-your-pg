@@ -10,6 +10,7 @@ import (
 
 	"golang.org/x/sys/unix"
 
+	"github.com/tfoertsch123/flock"
 	"github.com/tfoertsch123/log"
 	"github.com/tfoertsch123/own-your-pg/defaults"
 	"github.com/tfoertsch123/own-your-pg/slot"
@@ -611,6 +612,239 @@ func TestNewCur_FlockStored(t *testing.T) {
 	}
 	if cfg.curr == nil {
 		t.Error("curr should be set after newCur")
+	}
+}
+
+// ---- range locking ----
+
+// tryReaderLock opens the current file on a separate flock.Lock (simulating a
+// reader process) and tries to acquire a non-blocking shared range lock at
+// the given position. Returns whether the lock was acquired.
+func tryReaderLock(cfg *Cfg, start, length int64) bool {
+	lck := flock.New(
+		flock.WithPathAt(cfg.currDirFd),
+		flock.WithPath(defaults.CurFile),
+	)
+	if err := lck.Open(); err != nil {
+		return false
+	}
+	defer lck.Close()
+	return lck.TryLockRangeSh(start, length) == nil
+}
+
+// TestRangeLock_NewCur_LocksAtEoc verifies that newCur acquires an exclusive
+// range lock at the eoCommit position on the current file.
+func TestRangeLock_NewCur_LocksAtEoc(t *testing.T) {
+	cfg := newFileTestCfg(t)
+	cfg.writer = bytes.NewBuffer(make([]byte, 0, 65*1024))
+
+	_, err := cfg.newCur()
+	if err != nil {
+		t.Fatalf("newCur: %v", err)
+	}
+
+	// A reader from a separate fd should NOT be able to acquire a shared
+	// lock at position 0 (where eoc is for a new file).
+	if tryReaderLock(cfg, 0, 1) {
+		t.Error("shared lock at eoc=0 should be blocked by exclusive lock")
+	}
+
+	// A reader should be able to lock beyond eoc (position 1+).
+	if !tryReaderLock(cfg, 1, 1) {
+		t.Error("shared lock beyond eoc should succeed")
+	}
+}
+
+// TestRangeLock_Eoc_AdvancesLock verifies that eoc acquires a new lock at
+// the new eoCommit position and releases the old range.
+func TestRangeLock_Eoc_AdvancesLock(t *testing.T) {
+	cfg := newFileTestCfg(t)
+	cfg.writer = bytes.NewBuffer(make([]byte, 0, 65*1024))
+	cfg.maxSize = 16 * 1024 * 1024
+
+	_, err := cfg.newCur()
+	if err != nil {
+		t.Fatalf("newCur: %v", err)
+	}
+
+	// Write a BEGIN + COMMIT, call eoc
+	beginJSON := `{"action":"B","nextlsn":"XXXXXXXX/YYYYYYYY"}`
+	if err := cfg.writeData([]byte(beginJSON)); err != nil {
+		t.Fatalf("writeData B: %v", err)
+	}
+	commitJSON := `{"action":"C","nextlsn":"0/200"}`
+	if err := cfg.writeData([]byte(commitJSON)); err != nil {
+		t.Fatalf("writeData C: %v", err)
+	}
+	commitLSN := mylsn.LSN(0x200)
+	if err := cfg.eoc(commitLSN, true); err != nil {
+		t.Fatalf("eoc: %v", err)
+	}
+
+	oldEoc := int64(0) // original eoc
+	newEoc := cfg.eoCommit
+
+	if newEoc == oldEoc {
+		t.Fatal("eoc should have advanced")
+	}
+
+	// Open a reader fd
+	// The old position (0) should now be unlocked (released by UnlockRange)
+	if !tryReaderLock(cfg, oldEoc, 1) {
+		t.Error("shared lock at old eoc should succeed after eoc advances")
+	}
+
+	// The new position should be locked exclusively
+	if tryReaderLock(cfg, newEoc, 1) {
+		t.Error("shared lock at new eoc should be blocked by exclusive lock")
+	}
+
+	// Beyond new eoc should be unlocked
+	if !tryReaderLock(cfg, newEoc+1, 1) {
+		t.Error("shared lock beyond new eoc should succeed")
+	}
+}
+
+// TestRangeLock_Eoc_MultipleCommits verifies that after multiple eoc calls,
+// only the latest eoCommit position is locked.
+func TestRangeLock_Eoc_MultipleCommits(t *testing.T) {
+	cfg := newFileTestCfg(t)
+	cfg.writer = bytes.NewBuffer(make([]byte, 0, 65*1024))
+	cfg.maxSize = 16 * 1024 * 1024
+
+	_, err := cfg.newCur()
+	if err != nil {
+		t.Fatalf("newCur: %v", err)
+	}
+
+	// First commit
+	if err := cfg.writeData([]byte(`{"action":"B","nextlsn":"XXXXXXXX/YYYYYYYY"}`)); err != nil {
+		t.Fatalf("writeData B1: %v", err)
+	}
+	if err := cfg.writeData([]byte(`{"action":"C","nextlsn":"0/100"}`)); err != nil {
+		t.Fatalf("writeData C1: %v", err)
+	}
+	if err := cfg.eoc(mylsn.LSN(0x100), true); err != nil {
+		t.Fatalf("eoc 1: %v", err)
+	}
+	eoc1 := cfg.eoCommit
+
+	// Second commit
+	if err := cfg.writeData([]byte(`{"action":"B","nextlsn":"XXXXXXXX/YYYYYYYY"}`)); err != nil {
+		t.Fatalf("writeData B2: %v", err)
+	}
+	if err := cfg.writeData([]byte(`{"action":"C","nextlsn":"0/200"}`)); err != nil {
+		t.Fatalf("writeData C2: %v", err)
+	}
+	if err := cfg.eoc(mylsn.LSN(0x200), true); err != nil {
+		t.Fatalf("eoc 2: %v", err)
+	}
+	eoc2 := cfg.eoCommit
+
+	// Third commit
+	if err := cfg.writeData([]byte(`{"action":"B","nextlsn":"XXXXXXXX/YYYYYYYY"}`)); err != nil {
+		t.Fatalf("writeData B3: %v", err)
+	}
+	if err := cfg.writeData([]byte(`{"action":"C","nextlsn":"0/300"}`)); err != nil {
+		t.Fatalf("writeData C3: %v", err)
+	}
+	if err := cfg.eoc(mylsn.LSN(0x300), true); err != nil {
+		t.Fatalf("eoc 3: %v", err)
+	}
+	eoc3 := cfg.eoCommit
+
+	// All previous eoc positions should be unlocked
+	for _, pos := range []int64{0, eoc1, eoc2} {
+		if !tryReaderLock(cfg, pos, 1) {
+			t.Errorf("shared lock at pos %d should succeed", pos)
+		}
+	}
+
+	// Only the latest eoc should be locked
+	if tryReaderLock(cfg, eoc3, 1) {
+		t.Error("shared lock at latest eoc should be blocked")
+	}
+}
+
+// TestRangeLock_Rotate_ReleasesLock verifies that after rotation, the old
+// file's locks are released (fd closed) and the new file is locked at 0.
+func TestRangeLock_Rotate_ReleasesLock(t *testing.T) {
+	cfg := newFileTestCfg(t)
+	cfg.writer = bytes.NewBuffer(make([]byte, 0, 65*1024))
+	cfg.maxSize = 1 // trigger rotation
+
+	_, err := cfg.newCur()
+	if err != nil {
+		t.Fatalf("newCur: %v", err)
+	}
+
+	if err := cfg.writeData([]byte(`{"action":"B","nextlsn":"XXXXXXXX/YYYYYYYY"}`)); err != nil {
+		t.Fatalf("writeData B: %v", err)
+	}
+	if err := cfg.writeData([]byte(`{"action":"C","nextlsn":"0/200"}`)); err != nil {
+		t.Fatalf("writeData C: %v", err)
+	}
+	commitLSN := mylsn.LSN(0x200)
+	if err := cfg.eoc(commitLSN, true); err != nil {
+		t.Fatalf("eoc: %v", err)
+	}
+
+	// After rotation, a new current file should exist and be locked at 0
+	// Position 0 should be locked (new file, newCur locks at eoc=0)
+	if tryReaderLock(cfg, 0, 1) {
+		t.Error("shared lock at position 0 should be blocked after rotation")
+	}
+
+	// Position 1 should be unlocked
+	if !tryReaderLock(cfg, 1, 1) {
+		t.Error("shared lock at position 1 should succeed after rotation")
+	}
+}
+
+// TestRangeLock_TruncateKeepsLock verifies that truncateToEoc doesn't
+// change the lock position.
+func TestRangeLock_TruncateKeepsLock(t *testing.T) {
+	cfg := newFileTestCfg(t)
+	cfg.writer = bytes.NewBuffer(make([]byte, 0, 65*1024))
+	cfg.maxSize = 16 * 1024 * 1024
+
+	_, err := cfg.newCur()
+	if err != nil {
+		t.Fatalf("newCur: %v", err)
+	}
+
+	// Commit one transaction
+	if err := cfg.writeData([]byte(`{"action":"B","nextlsn":"XXXXXXXX/YYYYYYYY"}`)); err != nil {
+		t.Fatalf("writeData B: %v", err)
+	}
+	if err := cfg.writeData([]byte(`{"action":"C","nextlsn":"0/100"}`)); err != nil {
+		t.Fatalf("writeData C: %v", err)
+	}
+	if err := cfg.eoc(mylsn.LSN(0x100), true); err != nil {
+		t.Fatalf("eoc: %v", err)
+	}
+	eocPos := cfg.eoCommit
+
+	// Write uncommitted data beyond eoCommit
+	if _, err := cfg.curr.Write(
+		[]byte(`{"action":"B","nextlsn":"XXXXXXXX/YYYYYYYY"}`)
+	); err != nil {
+		t.Fatalf("Write uncommitted: %v", err)
+	}
+	cfg.writer.Write([]byte("buffered"))
+
+	// Truncate
+	if err := cfg.truncateToEoc(); err != nil {
+		t.Fatalf("truncateToEoc: %v", err)
+	}
+
+	// The lock should still be at eocPos
+	if tryReaderLock(cfg, eocPos, 1) {
+		t.Error("shared lock at eoc should still be blocked after truncate")
+	}
+	// Beyond eoc should be unlocked (truncated away)
+	if !tryReaderLock(cfg, eocPos+1, 1) {
+		t.Error("shared lock beyond eoc should succeed after truncate")
 	}
 }
 

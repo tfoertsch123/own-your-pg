@@ -147,15 +147,13 @@ func (cfg *Cfg) truncateToEoc() error {
 		if err != nil {
 			return err
 		}
-	} else {
-		cfg.mlg.Debugf("No truncation on reconnect, eof=%v, eoc=%v",
-			eof, cfg.eoCommit)
 	}
 
 	blen := cfg.writer.Len()
-	cfg.writer.Truncate(0)
-
-	cfg.mlg.Debugf("%v bytes discarded from write buffer", blen)
+	if blen > 0 {
+		cfg.writer.Truncate(0)
+		cfg.mlg.Debugf("%v bytes discarded from write buffer", blen)
+	}
 	return nil
 }
 
@@ -190,6 +188,10 @@ func (cfg *Cfg) newCur() (mylsn.LSN, error) {
 		if err != nil {
 			return mylsn.LSN(0), err
 		}
+		err = lck.LockRangeEx(0, 1)
+		if err != nil {
+			return mylsn.LSN(0), err
+		}
 		cfg.currLck, cfg.curr, fh = lck, fh, nil
 		cfg.firstTxnLSN = nil
 		cfg.eoCommit = 0
@@ -221,6 +223,11 @@ func (cfg *Cfg) newCur() (mylsn.LSN, error) {
 		if err != nil {
 			return llsn, err
 		}
+	}
+
+	err = lck.LockRangeEx(eoc, 1)
+	if err != nil {
+		return mylsn.LSN(0), err
 	}
 
 	cfg.currLck, cfg.curr, fh = lck, fh, nil
@@ -310,6 +317,18 @@ func (cfg *Cfg) eoc(lsn mylsn.LSN, writeBLSN bool) error {
 	}
 
 	cfg.eoCommit = eof
+	err = cfg.currLck.LockRangeEx(cfg.eoCommit, 1)
+	if err != nil {
+		return err
+	}
+
+	// There is an edge case here. If cfg.eoCommit ever were 0, then this
+	// call would unlock the range from 0 to infinity. However, this cannot
+	// happen. eoCommit at this point is always >0.
+	err = cfg.currLck.UnlockRange(0, cfg.eoCommit)
+	if err != nil {
+		return err
+	}
 
 	err = cfg.sl.SetLSN(lsn, true)
 	if err != nil {
