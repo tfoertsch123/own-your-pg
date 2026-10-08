@@ -27,6 +27,59 @@ type Cli struct {
 	Slot string `short:"S" help:"Slot name." default:"${basename}"`
 }
 
+func IntroHelp(link func(url, text string) string) string {
+	return `iuvbipbv pioubvapqfiurvp
+vupiqabvui
+vpquierbv
+vqwehnbvq
+bqwb
+wqtreb
+wqtb
+wqtvb casnb casd crgqer gqer gqerg qerg qerg qerg qergf qerg qerg qerg erq
+gqer gqer gqer g qerg eqrg reqg qer gqe rg qerg eqrg qerg eqr geq
+gqer geqr gq erg eqrg erqg erqg eqrg eqrg eqrg qer geqr g qerg er g
+fveqrfvgqerv
+
+vfqer
+vqer
+vqer
+vqer
+vqrviohqpvuifoq vq ervqervunbqerv qrev qerv qervqer vqerv qerv`
+}
+
+// SlotConfigHelp returns the slot configuration help text. The link
+// function is used to render URLs; if the terminal supports OSC 8
+// hyperlinks, link wraps the URL in escape sequences, otherwise it
+// returns the URL as-is.
+func SlotHelp(link func(url, text string) string) string {
+	return `Slot configuration:
+
+The capture process reads its configuration from the slot.
+The following slot parameters are recognized:
+
+  primary_conninfo         libpq connection string (required)
+  primary_slotname         PG replication slot name (default: slot name)
+  logfile                  log destination URL (e.g. //stderr, file:///path)
+  size_limit               file size limit to trigger rotation (default: 16MiB)
+  synchronous              on/true/1 for synchronous mode (default: off)
+  ignore_missing_identity  tables to ignore missing replication identity
+
+For more information about the logfile specification, see
+` + link("https://pkg.go.dev/github.com/tfoertsch123/log#ParseURL",
+		"the log package documentation") + `
+
+The size_limit if given as a simple integer number specifies the size in bytes.
+A unit can be appended according to the ParseStrictBytes function in
+` + link("https://pkg.go.dev/github.com/alecthomas/units#ParseStrictBytes",
+		"alecthomas/units package") + `
+
+The actual file size can significantly exceed size_limit. The capture process
+never breaks up a DB transaction into several files. So, a large change in
+one transaction can create GB-sized files even if size_limit=10KiB.
+
+Use slottool to set these parameters.`
+}
+
 type reloadable struct {
 	logURL string
 	recvP *cap.Param

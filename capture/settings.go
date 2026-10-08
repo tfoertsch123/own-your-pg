@@ -31,8 +31,14 @@ func (s *session) readSettings(update bool) (*reloadable, error) {
 			if _, exists := ci["application_name"]; ! exists {
 				ci["application_name"] = "OYPG-"+s.sl.Name()
 			}
-			ci["options"] = "--client_min_messages=warning " +
-				"--log_min_duration_statement=0"
+			if x, exists := ci["options"]; ! exists {
+				ci["options"] = x + " --client_min_messages=warning " +
+					"--log_min_duration_statement=0"
+			} else {
+				ci["options"] = "--client_min_messages=warning " +
+					"--log_min_duration_statement=0"
+			}
+			log.Noticef("ci: %v", ci.URL())
 			nCfg.recvP.ConnInfo = ci.URL()
 		}
 	} else {

@@ -8,7 +8,9 @@ package main
 import (
 	"os"
 	"path/filepath"
+
 	"github.com/alecthomas/kong"
+	"github.com/tfoertsch123/own-your-pg/help"
 	"github.com/tfoertsch123/own-your-pg/capture"
 )
 
@@ -18,10 +20,11 @@ func main() {
 	var args capture.Cli
 	kong.Parse(&args,
 		kong.Name(basename),
-		kong.Description("Capture PG changes, part of OYPG"),
+		kong.Description(help.Fmt(capture.IntroHelp)),
 		kong.Vars{
 			"basename": basename,
 		},
+		kong.Help(help.Printer(capture.SlotHelp)),
 	)
 
 	args.Run()
