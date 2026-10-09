@@ -13,18 +13,40 @@
 // printer, sets the application description via [Helper.Fmt], and calls
 // [Helper.CheckTerminal] after the parser is created:
 //
-//	l := help.NewHelper()
-//	parser := kong.Must(&args,
-//	    kong.Name(basename),
-//	    kong.Help(l.Printer),
-//	)
-//	l.CheckTerminal(parser.Stdout)
-//	parser.Model.Help = l.Fmt(introFn, extraFn)
-//
+//  l := NewHelper()
+//  l.CheckTerminal(os.Stdout)
+//  kong.Parse(
+//  	&args,
+//  	kong.Name(basename),
+//  	kong.Help(l.Printer),
+//  	kong.Writers(os.Stdout, os.Stderr),
+//  	kong.Description(l.Fmt(introFn, extraFn)),
+//  )
 // introFn and extraFn are [HelpF] functions — they receive a link
 // renderer and return a string. The link renderer is [Helper.hyperlink],
 // which either wraps the text in OSC 8 sequences or returns it as-is
 // depending on terminal capabilities.
+//
+// The [ParseArgs] function simplifies this further.
+//  type Cli struct {
+//  	Dir string `arg:"" required:"" help:"Working directory."`
+//  	Slot string `short:"S" help:"Slot name." default:"${basename}"`
+//  }
+//  // optional
+//  func (_ *Cli) IntroHelp(link func(url, text string) string) string {
+//  	return `...` + link(...) + `...` + ...
+//  }
+//  // optional
+//  func (_ *Cli) ExtraHelp(link func(url, text string) string) string {
+//  	return `...` + link(...) + `...` + ...
+//  }
+//  // optional
+//  func (_ *Cli) HelpVars() map[string]string {
+//  	return ...
+//  }
+//  var cli Cli
+//  help.ParseArgs(&cli)
+// Now all the help information is bundled with the object.
 package help
 
 import (
@@ -183,10 +205,16 @@ const delim = "\n\n:<\x00\x00>:\n\n"
 // Fmt renders two help sections and joins them with [delim].
 // before is printed before the Arguments/Flags (as the kong
 // description), after is moved to the end by [Helper.Printer].
-// If after is nil only the before section and a single delimiter
-// are returned.
+// If any of the parameters is nil, the corresponding sections
+// will be empty.
 func (l *Helper) Fmt(before, after HelpF) string {
 	l.links = nil				// just in case
+	empty := func(_ func(url, text string) string) string {
+		return ""
+	}
+	if before == nil {
+		before = empty
+	}
 	if after == nil {
 		return before(l.hyperlink) + delim
 	}
@@ -224,6 +252,7 @@ func (l *Helper) Printer(opts kong.HelpOptions, ctx *kong.Context) error {
 	}
 
 	buf.Reset()
+
 	l.replaceLinks(out[:idx], &buf) // before flags
 	buf.WriteString("\n\n")
 
@@ -243,45 +272,77 @@ func (l *Helper) Printer(opts kong.HelpOptions, ctx *kong.Context) error {
 	return err
 }
 
-// ParseArgs implements my standard command line parsing. It is
-// equivalent to this code:
-//  _, basename := filepath.Split(os.Args[0])
-//  
+// IntroHelper is an interface type requiring the IntroHelp method.
+// It is used by [ParseArgs] to determine if the object implements this
+// method.
+type IntroHelper interface {
+	IntroHelp(func(url, text string) string) string
+}
+
+// ExtraHelper is an interface type requiring the ExtraHelp method.
+// It is used by [ParseArgs] to determine if the object implements this
+// method.
+type ExtraHelper interface {
+	ExtraHelp(func(url, text string) string) string
+}
+
+// HelperVars is an interface type requiring the HelpVars method.
+// It is used by [ParseArgs] to determine if the object implements this
+// method.
+type HelperVars interface {
+	HelpVars() map[string]string
+}
+
+// ParseArgs implements my standard command line parsing. It is roughly
+// equivalent to this code except that the IntroHelp, ExtraHelp and
+// HelpVars functions are ignored if not implemented by args.
+//
 //  l := help.NewHelper()
-//  argsParser := kong.Must(
+//  l.CheckTerminal(os.Stdout)
+//  kv := kong.Vars{
+//  	"basename": basename,
+//  }
+//  for k, v := range args.HelpVars() {
+//  	kv[k] = v
+//  }
+//  kong.Parse(
 //  	args,
 //  	kong.Name(basename),
-//  	kong.Vars{
-//  		"basename": basename,
-//  	},
+// 		kong.Writers(os.Stdout, os.Stderr),
+// 		kong.Description(l.Fmt(args.IntroHelp, args.ExtraHelp)),
 //  	kong.Help(l.Printer),
 //  )
-//  
-//  l.CheckTerminal(argsParser.Stdout)
-//  argsParser.Model.Help = l.Fmt(beforeArgs, afterArgs)
-//  
-//  if _, err := argsParser.Parse(os.Args[1:]); err != nil {
-//  	argsParser.Fatalf("%v", err)
-//  }
-func ParseArgs(args interface{}, beforeArgs, afterArgs HelpF) {
+func ParseArgs(args interface{}) {
 	_, basename := filepath.Split(os.Args[0])
+	kv := kong.Vars{
+		"basename": basename,
+	}
+	if x, ok := args.(HelperVars); ok {
+		for k, v := range x.HelpVars() {
+			kv[k] = v
+		}
+	}
+
+	intro := HelpF(nil)
+	if x, ok := args.(IntroHelper); ok {
+		intro = x.IntroHelp
+	}
+
+	extra := HelpF(nil)
+	if x, ok := args.(ExtraHelper); ok {
+		extra = x.ExtraHelp
+	}
 
 	l := NewHelper()
-	argsParser := kong.Must(
+	l.CheckTerminal(os.Stdout)
+	kong.Parse(
 		args,
 		kong.Name(basename),
-		kong.Vars{
-			"basename": basename,
-		},
+		kv,
 		kong.Help(l.Printer),
+		kong.Writers(os.Stdout, os.Stderr),
+		kong.Description(l.Fmt(intro, extra)),
 	)
-
-	l.CheckTerminal(argsParser.Stdout)
-	argsParser.Model.Help = l.Fmt(beforeArgs, afterArgs)
-	
-	if _, err := argsParser.Parse(os.Args[1:]); err != nil {
-		argsParser.Fatalf("%v", err)
-	}
 }
 
 // Local Variables:

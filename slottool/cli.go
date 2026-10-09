@@ -77,6 +77,71 @@ type Cli struct {
 	Config []configItem `short:"c" sep:"none" help:"Config entry: key=string or key=JSON-array or key={shell quoted list of strings}."`
 }
 
+// IntroHelp implements help's IntroHelper interface. It returns the
+// first half of the help text before the command line parameters.
+// The link() function can be used to format certain phrases as
+// hyperlinks.
+func (_ *Cli) IntroHelp(link func(url, text string) string) string {
+	return `
+${basename} is the configuration tool for all programs in this system.
+Slots are small files residing in the "slots" subdirectory of the working
+directory. A slot combines configuration information with runtime status
+information.
+
+${basename} creates and modifies these files.
+`
+}
+
+// ExtraHelp implements help's ExtraHelper interface. It returns the
+// first half of the help text before the command line parameters.
+// The link() function can be used to format certain phrases as
+// hyperlinks.
+func (_ *Cli) ExtraHelp(link func(url, text string) string) string {
+	return `
+Examples:
+
+List all slots in working-directory
+ $ slottool working-directory
+ {
+   "Name": "capture",
+   "NextLSN": "4/3607B358",
+   "OwnerPid": 1999900,
+   "PidActive": true,
+   "Type": "Producer",
+   "Config": {
+     "ignore_missing_identity": [
+       "public.table1",
+       "schema.table2"
+     ],
+     "logfile": "file://DEBG5@STDERR?timeformat=2006-01-02+15:04:05.000",
+     "primary_conninfo": "postgres:///bench?service=mydb&application_name=m2" ,
+     "size_limit": "5KiB",
+     "synchronous": "1"
+   }
+ }
+
+Modify the "capture" slot
+ $ slottool tmp -S capture \
+            -c ignore_missing_identity='{schema.table1 schema.table2}'
+ {
+   "Name": "capture",
+   "NextLSN": "4/3607B358",
+   "OwnerPid": 1999900,
+   "PidActive": false,
+   "Type": "Producer",
+   "Config": {
+	 "ignore_missing_identity": [
+	   "schema.table1",
+	   "schema.table2"
+	 ],
+	 "logfile": "file://DEBG5@STDERR?timeformat=2006-01-02+15:04:05.000",
+	 "primary_conninfo": "postgres:///bench?service=mydb&application_name=m2",
+	 "size_limit": "5KiB",
+	 "synchronous": "1"
+   }
+ }
+`
+}
 // Local Variables:
 // tab-width: 4
 // End:

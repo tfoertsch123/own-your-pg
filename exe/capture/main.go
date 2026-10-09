@@ -12,7 +12,7 @@ import (
 
 func main() {
 	var args capture.Cli
-	help.ParseArgs(&args, capture.IntroHelp, capture.SlotHelp)
+	help.ParseArgs(&args)
 	args.Run()
 }
 

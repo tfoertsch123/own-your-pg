@@ -19,51 +19,6 @@ import (
 	cap "github.com/tfoertsch123/pglogreplsimple"
 )
 
-type Cli struct {
-	// Dir specifies the working directory, required.
-	Dir string `arg:"" required:"" help:"Working directory."`
-
-	// Slot is optional, short flag -S.
-	Slot string `short:"S" help:"Slot name." default:"${basename}"`
-}
-
-func IntroHelp(link func(url, text string) string) string {
-	return `iunvg bgwrt bhwrt wbhgrtbwr ttrwhg wtrhb gwrt hgw trhgw`
-}
-
-// SlotConfigHelp returns the slot configuration help text. The link
-// function is used to render URLs; if the terminal supports OSC 8
-// hyperlinks, link wraps the URL in escape sequences, otherwise it
-// returns the URL as-is.
-func SlotHelp(link func(url, text string) string) string {
-	return `Slot configuration:
-
-The capture process reads its configuration from the slot.
-The following slot parameters are recognized:
-
-  primary_conninfo         libpq connection string (required)
-  primary_slotname         PG replication slot name (default: slot name)
-  logfile                  log destination URL (e.g. //stderr, file:///path)
-  size_limit               file size limit to trigger rotation (default: 16MiB)
-  synchronous              on/true/1 for synchronous mode (default: off)
-  ignore_missing_identity  tables to ignore missing replication identity
-
-For more information about the logfile specification, see
-` + link("https://pkg.go.dev/github.com/tfoertsch123/log#ParseURL",
-		"the log package documentation") + `.
-
-The size_limit if given as a simple integer number specifies the size in bytes.
-A unit can be appended according to
-` + link("https://pkg.go.dev/github.com/alecthomas/units#ParseStrictBytes",
-		"the ParseStrictBytes function in alecthomas/units package") + `.
-
-The actual file size can significantly exceed size_limit. The capture process
-never breaks up a DB transaction into several files. So, a large change in
-one transaction can create GB-sized files even if size_limit=10KiB.
-
-Use slottool to set these parameters.`
-}
-
 type reloadable struct {
 	logURL string
 	recvP *cap.Param
