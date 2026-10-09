@@ -28,23 +28,7 @@ type Cli struct {
 }
 
 func IntroHelp(link func(url, text string) string) string {
-	return `iuvbipbv pioubvapqfiurvp
-vupiqabvui
-vpquierbv
-vqwehnbvq
-bqwb
-wqtreb
-wqtb
-wqtvb casnb casd crgqer gqer gqerg qerg qerg qerg qergf qerg qerg qerg erq
-gqer gqer gqer g qerg eqrg reqg qer gqe rg qerg eqrg qerg eqr geq
-gqer geqr gq erg eqrg erqg erqg eqrg eqrg eqrg qer geqr g qerg er g
-fveqrfvgqerv
-
-vfqer
-vqer
-vqer
-vqer
-vqrviohqpvuifoq vq ervqervunbqerv qrev qerv qervqer vqerv qerv`
+	return `iunvg bgwrt bhwrt wbhgrtbwr ttrwhg wtrhb gwrt hgw trhgw`
 }
 
 // SlotConfigHelp returns the slot configuration help text. The link
@@ -66,12 +50,12 @@ The following slot parameters are recognized:
 
 For more information about the logfile specification, see
 ` + link("https://pkg.go.dev/github.com/tfoertsch123/log#ParseURL",
-		"the log package documentation") + `
+		"the log package documentation") + `.
 
 The size_limit if given as a simple integer number specifies the size in bytes.
-A unit can be appended according to the ParseStrictBytes function in
+A unit can be appended according to
 ` + link("https://pkg.go.dev/github.com/alecthomas/units#ParseStrictBytes",
-		"alecthomas/units package") + `
+		"the ParseStrictBytes function in alecthomas/units package") + `.
 
 The actual file size can significantly exceed size_limit. The capture process
 never breaks up a DB transaction into several files. So, a large change in
