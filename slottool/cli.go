@@ -88,8 +88,9 @@ Slots are small files residing in the "slots" subdirectory of the working
 directory. A slot combines configuration information with runtime status
 information.
 
-${basename} creates and modifies these files.
-`
+${basename} displays, creates and modifies these files. The output is
+JSON and can be further processed by
+` + link("https://jqlang.org/manual/", "jq") + `.`
 }
 
 // ExtraHelp implements help's ExtraHelper interface. It returns the
@@ -121,7 +122,7 @@ List all slots in working-directory
  }
 
 Modify the "capture" slot
- $ slottool tmp -S capture \
+ $ slottool working-directory -S capture \
             -c ignore_missing_identity='{schema.table1 schema.table2}'
  {
    "Name": "capture",
@@ -140,6 +141,12 @@ Modify the "capture" slot
 	 "synchronous": "1"
    }
  }
+
+Send SIGHUP (reload) to the owner of the "capture" slot" if it is running
+
+ $ slottool working-directory -S capture |
+   jq -r 'if .PidActive then "kill -HUP \(.OwnerPid)" else empty end' |
+   sh
 `
 }
 // Local Variables:

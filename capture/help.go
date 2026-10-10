@@ -12,7 +12,8 @@ type Cli struct {
 func (_ *Cli) IntroHelp(link func(url, text string) string) string {
 	return `
 ${basename} consumes a stream of logical changes from a Postgres database.
-The changes are first recorded in "incomplete/current" the "working directory".
+The changes are first recorded in "incomplete/current" in the
+"working directory".
 Once the size of the "current" file exceeds a certain limit, it is renamed
 and placed directly in the working directory. After that a new "current"
 file is opened and the process is repeated.
@@ -21,7 +22,7 @@ The capture files in the working directory are called "history files". A
 history file always contains complete transactions. In other words, a
 transaction is never broken into several files.
 
-The name of a history file follows the this pattern:
+The name of a history file follows this pattern:
 
  XXXXXXXX-YYYYYYYY..xxxxxxxx-yyyyyyyy
 
@@ -34,8 +35,7 @@ the file.
 
 ${basename} reads its configuration from the "slot". Slots are files stored
 in the "slots" subdirectory of the working directory. Slots are created and
-modified using "slottool".
-`
+modified using "slottool".`
 }
 
 // IntroHelp implements help's ExtraHelper interface. It returns the
@@ -44,6 +44,27 @@ modified using "slottool".
 // hyperlinks.
 func (_ *Cli) ExtraHelp(link func(url, text string) string) string {
 	return `
+The slot:
+
+The slot to be used by ${basename} must be configured with type "Producer".
+
+ $ slottool working-directory -S newcapture -t Producer
+ {
+   "Name": "newcapture",
+   "NextLSN": "0/0",
+   "OwnerPid": 0,
+   "PidActive": false,
+   "Type": "Producer"
+ }
+
+Runtime information:
+
+  OwnerPid    the PID of ${basename} process using this slot
+  PidActive   whether or not the PID represents a running process
+  NextLSN     the LSN of the latest COMMIT record written to the current file
+              Used upon startup to tell where to start replication. Can be
+              modified with "slottool -l"
+
 Slot configuration:
 
   primary_conninfo         libpq connection string (required)
@@ -60,13 +81,28 @@ For more information about the logfile specification, see
 The size_limit if given as a simple integer number specifies the size in bytes.
 A unit can be appended according to
 ` + link("https://pkg.go.dev/github.com/alecthomas/units#ParseStrictBytes",
-		"the ParseStrictBytes function in alecthomas/units package") + `.
+		"the ParseStrictBytes function in the alecthomas/units package") + `.
 
 The actual file size can significantly exceed size_limit. The capture process
 never breaks up a DB transaction into several files. So, a large change in
 one transaction can create GB-sized files even if size_limit=10KiB.
 
-Use slottool to set these parameters.`
+Use slottool to set these parameters.
+
+Signals:
+
+  SIGINT SIGTERM   shut down
+  SIGHUP           reread slot and reconfigure
+
+You can use slottool to stop/reload it:
+
+ $ slottool working-directory -S capture |
+   jq -r 'if .PidActive then "kill -TERM \(.OwnerPid)" else empty end' |
+   sh
+ $ slottool working-directory -S capture |
+   jq -r 'if .PidActive then "kill -HUP \(.OwnerPid)" else empty end' |
+   sh
+`
 }
 
 // Local Variables:
