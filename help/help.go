@@ -308,8 +308,9 @@ type HelperVars interface {
 //  kong.Parse(
 //  	args,
 //  	kong.Name(basename),
-// 		kong.Writers(os.Stdout, os.Stderr),
-// 		kong.Description(l.Fmt(args.IntroHelp, args.ExtraHelp)),
+//  	kv,
+//  	kong.Writers(os.Stdout, os.Stderr),
+//  	kong.Description(l.Fmt(args.IntroHelp, args.ExtraHelp)),
 //  	kong.Help(l.Printer),
 //  )
 func ParseArgs(args interface{}) {

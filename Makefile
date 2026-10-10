@@ -46,6 +46,9 @@ T%:: %
 bin/%:: bin exe/%/*.go $(EXTRA)
 	go build -o $@ ./exe/$(@F)
 
+doc:
+	pkgsite -http=127.0.0.1:6060
+
 # define DR
 # bin/$1:: dump/$1
 # 	cp $$< $$@
