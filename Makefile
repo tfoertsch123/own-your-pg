@@ -12,6 +12,7 @@ EXTRA=$(filter-out stuff/% %_test.go,$(wildcard */*.go))
 MODS=$(patsubst %/,%,$(sort $(dir $(EXTRA))))
 
 V=$(if $(findstring 1,$(TEST_VERBOSE)),-v)
+R=$(if $(TEST_RUN),-run $(TEST_RUN))
 
 # since we are now requiring go1.27.1 jsonv2 is not an experiment anymore
 # export GOEXPERIMENT=jsonv2
@@ -39,7 +40,7 @@ Tslot:: Gslot
 Tmsg:: Gmsg
 
 T%:: %
-	@go test -count=1 -coverprofile $</cover.out $V ./$<
+	@go test $V $R -count=1 -coverprofile $</cover.out ./$<
 	@go tool cover -html=$</cover.out -o $</coverage.html
 	@echo Coverage report in file://$$PWD/$</coverage.html
 
@@ -56,3 +57,16 @@ doc:
 # endef
 
 # $(foreach t,dump restore create-origin check-identity archive_command,$(eval $(call DR,$(t))))
+
+# update, commit and push VERSION before running make tag
+tag:	VERSION
+	git fetch origin && \
+	[ "$$(git branch --show-current)" = master ] && \
+	L="$$(git rev-parse HEAD)" && \
+	R="$$(git rev-parse refs/remotes/origin/master)" && \
+	[ "$$L" = "$$R" ] && \
+	T="$$(cat VERSION)" && \
+	git tag $$T && \
+	git push origin tag $$T && \
+	M="$$(sed '/^module/!d; s/^module *//' go.mod)" && \
+	GOPROXY=proxy.golang.org go list -m $$M@$$T
