@@ -334,6 +334,59 @@ func TestDecodePGQualifiedNames_EarlyBreak(t *testing.T) {
 	}
 }
 
+func TestQident(t *testing.T) {
+	cases := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{name: "simple", input: "foo", want: `"foo"`},
+		{name: "mixed case", input: "MixedCase", want: `"MixedCase"`},
+		{name: "empty", input: "", want: `""`},
+		{name: "with space", input: "has space", want: `"has space"`},
+		{name: "with dot", input: "schema.table", want: `"schema.table"`},
+		{name: "embedded quote", input: `we"ird`, want: `"we""ird"`},
+		{name: "only a quote", input: `"`, want: `""""`},
+		{name: "two embedded quotes", input: `a"b"c`, want: `"a""b""c"`},
+		{name: "unicode", input: "schéma", want: `"schéma"`},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := Qident(tc.input)
+			if got != tc.want {
+				t.Errorf("got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestQliteralString(t *testing.T) {
+	cases := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{name: "simple", input: "foo", want: `'foo'`},
+		{name: "empty", input: "", want: `''`},
+		{name: "with space", input: "has space", want: `'has space'`},
+		{name: "embedded quote", input: "it's", want: `'it''s'`},
+		{name: "only a quote", input: "'", want: `''''`},
+		{name: "two embedded quotes", input: "a'b'c", want: `'a''b''c'`},
+		{name: "unicode", input: "schéma", want: `'schéma'`},
+		{name: "double quote not escaped", input: `say "hi"`, want: `'say "hi"'`},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := QliteralString(tc.input)
+			if got != tc.want {
+				t.Errorf("got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 // Local Variables:
 // tab-width: 4
 // End:

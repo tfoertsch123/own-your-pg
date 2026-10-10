@@ -50,6 +50,8 @@ Tests without this env var are skipped automatically.
   // End:
 
   ```
+  When code is added at the end of an existing file, then it should be
+  added BEFORE this comment block.
 - line length should not exceed 79 characters
 - Error variables: `ErrFoo` package-level, returned not logged in library code
 - Struct fields: lowercase, unexported where possible; accessed via methods

@@ -10,10 +10,12 @@ import (
 	"github.com/tfoertsch123/own-your-pg/jval"
 )
 
+// Qident returns the nm parameter quoted as SQL identifier.
 func Qident(nm string) string {
 	return `"`+strings.ReplaceAll(nm, `"`, `""`)+`"`
 }
 
+// QliteralString quotes the input string as a SQL string literal.
 func QliteralString(nm string) string {
 	return `'`+strings.ReplaceAll(nm, `'`, `''`)+`'`
 }
