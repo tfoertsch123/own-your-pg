@@ -60,6 +60,7 @@ type session struct {
 	lg *log.Logger
 	mlg *log.Logger				// to be used in the writing part
 
+	ignMissIdMap map[string]struct{}
 	reloadable
 }
 
@@ -71,6 +72,8 @@ var (
 	ErrInvalidSynchronous = errors.New("synchronous is invalid")
 	ErrCurrGarbage       = errors.New("current file is garbage")
 	ErrMetaGarbage       = errors.New("metadata file is garbage")
+	ErrNoticeMessage     = errors.New("PG")
+	ErrInvalidTableName  = errors.New("invalid table name")
 )
 
 func (cli *Cli) Run() {
@@ -94,6 +97,7 @@ func (cli *Cli) Run() {
 		mgr: mgr,
 		sl: sl,
 		currDirFd: -1,
+		ignMissIdMap: map[string]struct{}{},
 	}
 
 	s.ensureIncDir()

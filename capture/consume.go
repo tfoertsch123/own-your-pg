@@ -7,10 +7,12 @@ import (
 	"bytes"
 	"fmt"
 	"io"
+	"regexp"
 
 	"github.com/jackc/pglogrepl"
 	"github.com/jackc/pgx/v5/pgproto3"
 
+	"github.com/tfoertsch123/own-your-pg/msg"
 	mylsn "github.com/tfoertsch123/own-your-pg/lsn"
 	cap "github.com/tfoertsch123/pglogreplsimple"
 )
@@ -119,6 +121,69 @@ func parseAndAddLsn(data []byte, lsn mylsn.LSN) (*parsed, error) {
 	return res, nil
 }
 
+
+// https://github.com/eulerto/wal2json/blob/master/wal2json.c#L2359-L2383
+var miss_replid_re = regexp.MustCompile(
+	`\Ano tuple identifier for (?:UPDATE|DELETE) in table "(.+?)"\."(.+)"\z`,
+)
+
+func (s *session) handleNotice(dat *pgproto3.NoticeResponse) error {
+	switch dat.SeverityUnlocalized {
+	case "ERROR", "FATAL", "PANIC": // ERROR and above are real errors
+		return fmt.Errorf(
+			"%w: %s: %v", ErrNoticeMessage,
+			dat.SeverityUnlocalized, dat.Message,
+		)
+	case "WARNING":
+		// relying on text matching is quite unfortunate.
+		if tb := miss_replid_re.FindStringSubmatch(
+			dat.Message,
+		); tb != nil {
+			if _, ok := s.ignMissIdMap["*"]; ok { // ignore all
+				s.mlg.Infof(
+					`Ignoring all missing replication identities: "%s"."%s"`,
+					tb[1], tb[2],
+				)
+				return nil
+			}
+			sch := msg.Qident(tb[1])
+			if _, ok := s.ignMissIdMap[sch]; ok {
+				// ignore schema
+				s.mlg.Infof(
+					`Ignoring missing replication identity in schema `+
+						`"%[1]s": "%[1]s"."%[2]s"`,
+					tb[1], tb[2],
+				)
+				return nil
+			}
+			if _, ok := s.ignMissIdMap[sch + "." + msg.Qident(tb[2])]; ok {
+				// ignore table
+				s.mlg.Infof(
+					`Ignoring missing replication identity in table "%s"."%s"`,
+					tb[1], tb[2],
+				)
+				return nil
+			}
+
+			return fmt.Errorf(
+				"%w: %s: %v", ErrNoticeMessage,
+				dat.SeverityUnlocalized, dat.Message,
+			)
+		}
+		s.mlg.Infof(
+			"%v: %s:%v -- ignored", ErrNoticeMessage,
+			dat.SeverityUnlocalized, dat.Message,
+		)
+		return nil
+	default:
+		s.mlg.Infof(
+			"%v: %s:%v -- ignored", ErrNoticeMessage,
+			dat.SeverityUnlocalized, dat.Message,
+		)
+		return nil
+	}
+}
+
 func (s *session) consume(
 	it iter.Seq[cap.MsgItem],
 	ack func(pglogrepl.LSN, ...pglogrepl.LSN),
@@ -164,7 +229,7 @@ func (s *session) consume(
 	//
 	// Within a B/C pair, a PKAL can be received. So, this would be possible:
 	//   B, I, U, PKAL, D, C
-	// However, in this scenario PKAL,ServerWALEnd <= C.ServerWALEnd always
+	// However, in this scenario PKAL.ServerWALEnd <= C.ServerWALEnd always
 	// holds.
 	//
 	// For transaction/message ordering, only C, M (non-transactional) and
@@ -267,7 +332,10 @@ func (s *session) consume(
 			}
 
 		case *pgproto3.NoticeResponse:
-			s.mlg.Infof("notice>> %v", dat.Message)
+			// s.mlg.Infof("notice>> %v", dat.Message)
+			if err := s.handleNotice(dat); err != nil {
+				s.mlg.Panicf("%v", err)
+			}
 
 		default:
 			s.mlg.Panicf("SHOULD NOT HAPPEN>> %T", msg)

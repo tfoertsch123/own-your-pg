@@ -279,8 +279,8 @@ func TestReadSettings_IgnoreMissingIdentity(t *testing.T) {
 	if len(nCfg.ignMissId) != 2 {
 		t.Fatalf("ignMissId len: got %d, want 2", len(nCfg.ignMissId))
 	}
-	if nCfg.ignMissId[0] != "table1" || nCfg.ignMissId[1] != "table2" {
-		t.Errorf("ignMissId: got %v, want [table1, table2]",
+	if nCfg.ignMissId[0] != `"table1"` || nCfg.ignMissId[1] != `"table2"` {
+		t.Errorf(`ignMissId: got %v, want ["table1", "table2"]`,
 			nCfg.ignMissId)
 	}
 }

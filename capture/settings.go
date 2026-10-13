@@ -3,9 +3,11 @@ package capture
 import (
 	"strconv"
 	"strings"
+	"fmt"
 	"github.com/alecthomas/units"
 	"github.com/tfoertsch123/log"
 	"github.com/tfoertsch123/own-your-pg/defaults"
+	"github.com/tfoertsch123/own-your-pg/msg"
 	cap "github.com/tfoertsch123/pglogreplsimple"
 	"github.com/tfoertsch123/pgconnstr"
 )
@@ -53,6 +55,26 @@ func (s *session) readSettings(update bool) (*reloadable, error) {
 	}
 
 	x, _ = s.sl.GetConfig("ignore_missing_identity", false)
+	for idx_, id_ := range x {
+		if id_ == `*` {
+			continue			// ignore everything
+		}
+		parts_, rest_, err := msg.DecodePGQualifiedName(id_)
+		if err != nil {
+			return nCfg, fmt.Errorf("ignore_missing_identity(%s): %w",
+				id_, err)
+		}
+		if rest_ != "" || len(parts_) > 2 {
+			return nCfg, fmt.Errorf("ignore_missing_identity(%s): %w",
+				id_, ErrInvalidTableName)
+		}
+		switch len(parts_) {
+		case 1:
+			x[idx_] = msg.Qident(parts_[0])
+		case 2:
+			x[idx_] = msg.Qident(parts_[0]) + "." + msg.Qident(parts_[1])
+		}
+	}
 	nCfg.ignMissId = x
 
 	x, _ = s.sl.GetConfig("size_limit", false)
@@ -165,6 +187,10 @@ func (s *session) applySettings(nCfg *reloadable, recvP *cap.Param) error {
 		nCfg.recvP = recvP
 	}
 	s.reloadable = *nCfg
+	clear(s.ignMissIdMap)
+	for _, el_ := range s.ignMissId {
+		s.ignMissIdMap[el_] = struct{}{}
+	}
 
 	s.lg.Infof("Reload Parameters:\n%v", nCfg)
 	return ret
