@@ -24,6 +24,7 @@ type reloadable struct {
 	recvP *cap.Param
 	maxSize int64
 	ignMissId []string
+	ignMissIdMap map[[2]string]struct{}
 }
 
 func (r *reloadable) String() string {
@@ -60,7 +61,6 @@ type session struct {
 	lg *log.Logger
 	mlg *log.Logger				// to be used in the writing part
 
-	ignMissIdMap map[string]struct{}
 	reloadable
 }
 
@@ -97,7 +97,6 @@ func (cli *Cli) Run() {
 		mgr: mgr,
 		sl: sl,
 		currDirFd: -1,
-		ignMissIdMap: map[string]struct{}{},
 	}
 
 	s.ensureIncDir()

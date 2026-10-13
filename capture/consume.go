@@ -12,7 +12,6 @@ import (
 	"github.com/jackc/pglogrepl"
 	"github.com/jackc/pgx/v5/pgproto3"
 
-	"github.com/tfoertsch123/own-your-pg/msg"
 	mylsn "github.com/tfoertsch123/own-your-pg/lsn"
 	cap "github.com/tfoertsch123/pglogreplsimple"
 )
@@ -139,15 +138,14 @@ func (s *session) handleNotice(dat *pgproto3.NoticeResponse) error {
 		if tb := miss_replid_re.FindStringSubmatch(
 			dat.Message,
 		); tb != nil {
-			if _, ok := s.ignMissIdMap["*"]; ok { // ignore all
+			if _, ok := s.ignMissIdMap[[2]string{}]; ok { // ignore all
 				s.mlg.Infof(
 					`Ignoring all missing replication identities: "%s"."%s"`,
 					tb[1], tb[2],
 				)
 				return nil
 			}
-			sch := msg.Qident(tb[1])
-			if _, ok := s.ignMissIdMap[sch]; ok {
+			if _, ok := s.ignMissIdMap[[2]string{tb[1]}]; ok {
 				// ignore schema
 				s.mlg.Infof(
 					`Ignoring missing replication identity in schema `+
@@ -156,7 +154,7 @@ func (s *session) handleNotice(dat *pgproto3.NoticeResponse) error {
 				)
 				return nil
 			}
-			if _, ok := s.ignMissIdMap[sch + "." + msg.Qident(tb[2])]; ok {
+			if _, ok := s.ignMissIdMap[[2]string{tb[1], tb[2]}]; ok {
 				// ignore table
 				s.mlg.Infof(
 					`Ignoring missing replication identity in table "%s"."%s"`,

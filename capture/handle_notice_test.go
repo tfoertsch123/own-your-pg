@@ -9,7 +9,7 @@ import (
 	"github.com/tfoertsch123/log"
 )
 
-func newNoticeTestSession(t *testing.T, ignMissId []string) *session {
+func newNoticeTestSession(t *testing.T, ignMissId [][]string) *session {
 	t.Helper()
 	lg := log.NewR(log.WithTopic("TEST"))
 	return &session{
@@ -80,7 +80,7 @@ func TestHandleNotice_MissingIdentity_Ignored(t *testing.T) {
 
 func TestHandleNotice_MissingIdentity_IgnoreAll(t *testing.T) {
 	const noticeMsg = `no tuple identifier for UPDATE in table "public"."orders"`
-	s := newNoticeTestSession(t, []string{"*"})
+	s := newNoticeTestSession(t, [][]string{{}})
 	if err := s.handleNotice(notice("WARNING", noticeMsg)); err != nil {
 		t.Errorf("ignore-all should silence the notice, got %v", err)
 	}
@@ -88,7 +88,7 @@ func TestHandleNotice_MissingIdentity_IgnoreAll(t *testing.T) {
 
 func TestHandleNotice_MissingIdentity_IgnoreSchema(t *testing.T) {
 	const noticeMsg = `no tuple identifier for UPDATE in table "public"."orders"`
-	s := newNoticeTestSession(t, []string{`"public"`})
+	s := newNoticeTestSession(t, [][]string{{"public"}})
 	if err := s.handleNotice(notice("WARNING", noticeMsg)); err != nil {
 		t.Errorf("schema ignore should silence the notice, got %v", err)
 	}
@@ -96,7 +96,7 @@ func TestHandleNotice_MissingIdentity_IgnoreSchema(t *testing.T) {
 
 func TestHandleNotice_MissingIdentity_IgnoreTable(t *testing.T) {
 	const noticeMsg = `no tuple identifier for DELETE in table "public"."orders"`
-	s := newNoticeTestSession(t, []string{`"public"."orders"`})
+	s := newNoticeTestSession(t, [][]string{{"public", "orders"}})
 	if err := s.handleNotice(notice("WARNING", noticeMsg)); err != nil {
 		t.Errorf("table ignore should silence the notice, got %v", err)
 	}
@@ -105,7 +105,7 @@ func TestHandleNotice_MissingIdentity_IgnoreTable(t *testing.T) {
 func TestHandleNotice_MissingIdentity_DifferentTable(t *testing.T) {
 	// Ignoring "public.orders" must not silence "other.orders".
 	const noticeMsg = `no tuple identifier for UPDATE in table "other"."orders"`
-	s := newNoticeTestSession(t, []string{`"public"."orders"`})
+	s := newNoticeTestSession(t, [][]string{{"public", "orders"}})
 	if err := s.handleNotice(notice("WARNING", noticeMsg)); err == nil {
 		t.Error("different schema should not be ignored")
 	}
@@ -115,10 +115,14 @@ func TestHandleNotice_MissingIdentity_DifferentTable(t *testing.T) {
 // tab-width: 4
 // End:
 
-func makeMap(ignMissId []string) map[string]struct{} {
-	m := make(map[string]struct{}, len(ignMissId))
-	for _, el := range ignMissId {
-		m[el] = struct{}{}
+// makeMap builds an ignMissIdMap from canonical name components.
+// A nil/empty slice entry represents "*" (ignore all).
+func makeMap(ignMissId [][]string) map[[2]string]struct{} {
+	m := make(map[[2]string]struct{}, len(ignMissId))
+	for _, parts := range ignMissId {
+		var key [2]string
+		copy(key[:], parts)
+		m[key] = struct{}{}
 	}
 	return m
 }

@@ -18,7 +18,10 @@ import (
 // readSettings must not access anything other than s.sl, not even a logger.
 // It can be called by a separate go routine.
 func (s *session) readSettings(update bool) (*reloadable, error) {
-	nCfg := &reloadable{recvP: &cap.Param{}}
+	nCfg := &reloadable{
+		recvP: &cap.Param{},
+		ignMissIdMap: map[[2]string]struct{}{},
+	}
 	if x, err := s.sl.GetConfig("logfile", update); err != nil {
 		return nCfg, err
 	} else if len(x) >= 1 {
@@ -55,8 +58,9 @@ func (s *session) readSettings(update bool) (*reloadable, error) {
 	}
 
 	x, _ = s.sl.GetConfig("ignore_missing_identity", false)
-	for idx_, id_ := range x {
+	for _, id_ := range x {
 		if id_ == `*` {
+			nCfg.ignMissIdMap[[2]string{}] = struct{}{}
 			continue			// ignore everything
 		}
 		parts_, rest_, err := msg.DecodePGQualifiedName(id_)
@@ -70,9 +74,9 @@ func (s *session) readSettings(update bool) (*reloadable, error) {
 		}
 		switch len(parts_) {
 		case 1:
-			x[idx_] = msg.Qident(parts_[0])
+			nCfg.ignMissIdMap[[2]string{parts_[0]}] = struct{}{}
 		case 2:
-			x[idx_] = msg.Qident(parts_[0]) + "." + msg.Qident(parts_[1])
+			nCfg.ignMissIdMap[[2]string{parts_[0], parts_[1]}] = struct{}{}
 		}
 	}
 	nCfg.ignMissId = x
@@ -187,10 +191,6 @@ func (s *session) applySettings(nCfg *reloadable, recvP *cap.Param) error {
 		nCfg.recvP = recvP
 	}
 	s.reloadable = *nCfg
-	clear(s.ignMissIdMap)
-	for _, el_ := range s.ignMissId {
-		s.ignMissIdMap[el_] = struct{}{}
-	}
 
 	s.lg.Infof("Reload Parameters:\n%v", nCfg)
 	return ret

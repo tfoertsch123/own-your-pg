@@ -14,7 +14,7 @@ func newApplySession(t *testing.T, cfgs map[string][]string) *session {
 	s := &session{
 		sl:           sl,
 		recvP:        &cap.Param{},
-		ignMissIdMap: map[string]struct{}{},
+		ignMissIdMap: map[[2]string]struct{}{},
 	}
 	s.lg = log.NewR(log.WithTopic("TEST"))
 	s.mlg = s.lg.New(log.WithTopic("WRT"))
@@ -91,10 +91,10 @@ func TestApplySettings_IgnoreMissingIdentityMap(t *testing.T) {
 		t.Fatalf("applySettings: %v", err)
 	}
 
-	if _, ok := s.ignMissIdMap["*"]; !ok {
+	if _, ok := s.ignMissIdMap[[2]string{}]; !ok {
 		t.Error("* should be in ignMissIdMap")
 	}
-	if _, ok := s.ignMissIdMap[`"public"."orders"`]; !ok {
+	if _, ok := s.ignMissIdMap[[2]string{"public", "orders"}]; !ok {
 		t.Error("quoted table name should be in ignMissIdMap")
 	}
 }
