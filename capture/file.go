@@ -302,14 +302,17 @@ func (s *session) eoc(lsn mylsn.LSN, writeBLSN bool) error {
 		return err
 	}
 
-	// s.firstTxnLSN is set in consume.go when the first B record is
-	// consumed. Since C always comes after B it should not be nil here.
-	err = s.writeMeta(eof, s.firstTxnLSN, lsn)
+	// We need to sync the current file before writeMeta. WriteMeta concludes
+	// our transaction. It confirms that everything has been safely written.
+	// This requires the sync.
+	err = s.curr.Sync()
 	if err != nil {
 		return err
 	}
 
-	err = s.curr.Sync()
+	// s.firstTxnLSN is set in consume.go when the first B record is
+	// consumed. Since C always comes after B it should not be nil here.
+	err = s.writeMeta(eof, s.firstTxnLSN, lsn)
 	if err != nil {
 		return err
 	}
