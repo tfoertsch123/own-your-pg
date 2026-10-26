@@ -132,6 +132,10 @@ func (m *Mgr) Slots() ([]string, error) {
 	return slots, nil
 }
 
+func (m *Mgr) Delete(name string) error {
+	return unix.Unlinkat(m.lck.Fd(), name + fext, 0)
+}
+
 // Local Variables:
 // tab-width: 4
 // End:

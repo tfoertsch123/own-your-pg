@@ -75,6 +75,9 @@ type Cli struct {
 
 	// Configs is a repeated flag, short flag -c.
 	Config []configItem `short:"c" sep:"none" help:"Config entry: key=string or key=JSON-array or key={shell quoted list of strings}."`
+
+	// Delete is optional, short flag -d.
+	Delete bool `short:"d" help:"delete the slot"`
 }
 
 // IntroHelp implements help's IntroHelper interface. It returns the

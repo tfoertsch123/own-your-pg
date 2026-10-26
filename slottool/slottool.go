@@ -143,7 +143,8 @@ func (args *Cli) mgr(create bool) (*slot.Mgr, error) {
 }
 
 func (args *Cli) Run() {
-	if args.Config == nil && args.Type == nil && args.LSN == nil {
+	if args.Config == nil && args.Type == nil && args.LSN == nil &&
+	   !args.Delete {
 		// this is listing only. So, we fail if the mgr does not exist
 		// and cannot be created.
 		m, err := args.mgr(false)
@@ -166,7 +167,17 @@ func (args *Cli) Run() {
 		}
 		defer m.Close()
 
-		args.Modify(m)
+		if args.Delete {
+			if args.Config != nil && args.Type != nil && args.LSN != nil {
+				log.Panic("-d is incompatible with -c, -t and -l")
+				return
+			}
+			if err := m.Delete(*args.Slot); err != nil {
+				log.Panicf("Could not delete slot: %v", err)
+			}
+		} else {
+			args.Modify(m)
+		}
 	}
 }
 
