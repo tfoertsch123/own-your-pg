@@ -116,6 +116,7 @@ func (sl *Slot) load() error {
 		}
 
 		// I guess, that's all for this case
+		sl.Config = map[string][]string{}
 		return nil
 	}
 

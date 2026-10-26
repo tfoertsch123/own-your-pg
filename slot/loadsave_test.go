@@ -319,6 +319,25 @@ func TestLoadSave(t *testing.T) {
 		})
 	})
 
+	t.Run("load empty file", func(t *testing.T) {
+		defer func(hdr header) {sl.header = hdr}(sl.header)
+		defer func(cfg Cfg) {sl.Cfg = cfg}(sl.Cfg)
+
+		// reset slot to empty
+		if err := sl.fh.Truncate(0); err != nil {
+			t.Fatalf("Truncate %v", err)
+		}
+
+		if err := sl.load(); err != nil {
+			t.Errorf("unexpected error: %v", err)
+		}
+
+		if sl.Config == nil {
+			t.Error("Config is nil after load()")
+		}
+
+	})
+
 	t.Run("load", func(t *testing.T) {
 		defer func(hdr header) {slro.header = hdr}(slro.header)
 		defer func(hdr header) {sl.header = hdr}(sl.header)
