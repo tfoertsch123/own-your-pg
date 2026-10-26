@@ -123,6 +123,7 @@ func (cli *Cli) Run() {
 		if err != nil {
 			log.Panicf("%v", err)
 		}
+		startLSN = llsn_
 	}
 
 	m := cap.NewReceiver(
