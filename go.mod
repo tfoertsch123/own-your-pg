@@ -9,13 +9,13 @@ require (
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51
 	github.com/spf13/pflag v1.0.10
-	github.com/tfoertsch123/flock v1.1.0
+	github.com/tfoertsch123/flock v1.2.0
 	github.com/tfoertsch123/linux-ls v0.1.0
 	github.com/tfoertsch123/log v0.3.0
 	github.com/tfoertsch123/pgconnstr v0.1.2
-	github.com/tfoertsch123/pglogreplsimple v0.1.0
+	github.com/tfoertsch123/pglogreplsimple v0.2.0
 	github.com/tinylib/msgp v1.6.5
-	golang.org/x/sys v0.48.0
+	golang.org/x/sys v0.49.0
 )
 
 require (
@@ -23,9 +23,9 @@ require (
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/philhofer/fwd v1.2.0 // indirect
-	golang.org/x/text v0.42.0 // indirect
+	golang.org/x/text v0.43.0 // indirect
 )
 
-replace github.com/tfoertsch123/flock => ../flock
+//replace github.com/tfoertsch123/flock => ../flock
 
-replace github.com/tfoertsch123/pglogreplsimple => ../pglogreplsimple
+//replace github.com/tfoertsch123/pglogreplsimple => ../pglogreplsimple

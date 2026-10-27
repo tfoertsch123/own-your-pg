@@ -51,6 +51,8 @@ github.com/stretchr/testify v1.8.4/go.mod h1:sz/lmYIOXD/1dqDmKjjqLyZ2RngseejIcXl
 github.com/stretchr/testify v1.9.0/go.mod h1:r2ic/lqez/lEtzL7wO/rwa5dbSLXVDPFyf8C91i36aY=
 github.com/stretchr/testify v1.11.1 h1:7s2iGBzp5EwR7/aIZr8ao5+dra3wiQyKjjFuvgVKu7U=
 github.com/stretchr/testify v1.11.1/go.mod h1:wZwfW3scLgRK+23gO65QZefKpKQRnfz6sD981Nm4B6U=
+github.com/tfoertsch123/flock v1.2.0 h1:peRiJvGXNL+CmS7KDXcvgAilST4d11WjJA4mejqcOVI=
+github.com/tfoertsch123/flock v1.2.0/go.mod h1:bJoDKich9Fl7OVvcYjbDvd0jd6Uojs5Rdf5UCu7kBaA=
 github.com/tfoertsch123/linux-ls v0.1.0 h1:AQqLN4S12EcMPKM+IayKDpTJI9k1h4YXQogxmnGsJEw=
 github.com/tfoertsch123/linux-ls v0.1.0/go.mod h1:8vg7tzt7gest3/CsSLvsIv7tz5FWTPzPGOgXR7m89Ag=
 github.com/tfoertsch123/log v0.3.0 h1:sJb7CeGkzmQQlDHrZwRJmHeIWqCBrnVrSFo2jJ522wY=
@@ -61,6 +63,8 @@ github.com/tfoertsch123/pgconnstr v0.1.2 h1:mkuUY1Mh6MMUbagwwHEyVpjPvf9jlOgaL0UZ
 github.com/tfoertsch123/pgconnstr v0.1.2/go.mod h1:dgeXW8+/r/6hUKnCTQRFXfR8N3lM1/AHf5GFrGF96os=
 github.com/tfoertsch123/pglogreplsimple v0.1.0 h1:I+JNhR+J1g0pqW8s96yv5kG73bbNEXh9Iu7LpicEIMA=
 github.com/tfoertsch123/pglogreplsimple v0.1.0/go.mod h1:QD0amh1QZvFvLGJur3pBQtMbFi2VDrFar52cWfWH+w8=
+github.com/tfoertsch123/pglogreplsimple v0.2.0 h1:W4ek96icw8Kl/bkH+VwkUF8CX60Lmw5DsQQv/s/TtBM=
+github.com/tfoertsch123/pglogreplsimple v0.2.0/go.mod h1:QD0amh1QZvFvLGJur3pBQtMbFi2VDrFar52cWfWH+w8=
 github.com/tinylib/msgp v1.6.4 h1:mOwYbyYDLPj35mkA2BjjYejgJk9BuHxDdvRnb6v2ZcQ=
 github.com/tinylib/msgp v1.6.4/go.mod h1:RSp0LW9oSxFut3KzESt5Voq4GVWyS+PSulT77roAqEA=
 github.com/tinylib/msgp v1.6.5 h1:iAH6XTP7BpzErjBZlujJQXxA+GmRi2YWs6M4KdLtNbE=
@@ -68,14 +72,19 @@ github.com/tinylib/msgp v1.6.5/go.mod h1:RSp0LW9oSxFut3KzESt5Voq4GVWyS+PSulT77ro
 golang.org/x/sync v0.20.0 h1:e0PTpb7pjO8GAtTs2dQ6jYa5BWYlMuX047Dco/pItO4=
 golang.org/x/sync v0.20.0/go.mod h1:9xrNwdLfx4jkKbNva9FpL6vEN7evnE43NNNJQ2LF3+0=
 golang.org/x/sync v0.23.0 h1:KameEIfc1IkluZyXWLn39Wd4tURc6GbCiISGiZm2bQk=
+golang.org/x/sync v0.24.0 h1:iqiDrGoDgyuvAKrhLQthUEzU/R378N78gXbBjxed7oA=
 golang.org/x/sys v0.47.0 h1:o7XGOvZQCADBQQ4Y7VNq2dRWQR7JmOUW8Kxx4ZsNgWs=
 golang.org/x/sys v0.47.0/go.mod h1:4GL1E5IUh+htKOUEOaiffhrAeqysfVGipDYzABqnCmw=
 golang.org/x/sys v0.48.0 h1:bbX/i/6MgT9BVLM9RT1thmxL04yeTAhbEz4SyadbXoo=
 golang.org/x/sys v0.48.0/go.mod h1:hNLxWAXmnKAxqDtdwIYC4bM9oQPEecfsnNMuSxOs3og=
+golang.org/x/sys v0.49.0 h1:XbzkgYJHdqh/8m2Uu0W/dQv8nktxx4BFHp1M0gROTXA=
+golang.org/x/sys v0.49.0/go.mod h1:hNLxWAXmnKAxqDtdwIYC4bM9oQPEecfsnNMuSxOs3og=
 golang.org/x/text v0.35.0 h1:JOVx6vVDFokkpaq1AEptVzLTpDe9KGpj5tR4/X+ybL8=
 golang.org/x/text v0.35.0/go.mod h1:khi/HExzZJ2pGnjenulevKNX1W67CUy0AsXcNubPGCA=
 golang.org/x/text v0.42.0 h1:JbOZXgfeCPU9gacVtYliJqOhD+zhrEqK4LfdpmlUZqI=
 golang.org/x/text v0.42.0/go.mod h1:ojzP1Z+2QtioaF8DTtO8K5q7JWVVYwZKenzujK0Zd0E=
+golang.org/x/text v0.43.0 h1:1QivrlhwAsnMOcqgOdl9my7s9OyZl8O5/UGUTJVXoWc=
+golang.org/x/text v0.43.0/go.mod h1:hbSIYA/amXcRXTFSZqh8tWHEoqRvvbKPJ2uz/KU+a+s=
 gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=
 gopkg.in/yaml.v3 v3.0.0-20200313102051-9f266ea9e77c/go.mod h1:K4uyk7z7BCEPqu6E+C64Yfv1cQ7kz7rIZviUmN+EgEM=
 gopkg.in/yaml.v3 v3.0.1 h1:fxVm/GzAzEWqLHuvctI91KS9hhNmmWOoWu0XTYJS7CA=
